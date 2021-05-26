@@ -127,8 +127,9 @@ $ rm ocp-sample-flask-docker/Chart.yaml.cln
 
 ### Update values.yaml
 
-Change *repository*, *tag* and *port* values.
-Note *repository* and *tag* should match that on DockerHub, but *tag* is *latest* so leave empty.
+Change *repository*, *tag* and *port* values, image-pull will fail if *tag* is not set or left empty.
+
+Note *repository* and *tag* should match that on DockerHub otherwise it will not deploy.
 
 ```bash
 $ cp ocp-sample-flask-docker/values.yaml  ocp-sample-flask-docker/values.yaml.cln
@@ -138,22 +139,28 @@ $ diff -c  ocp-sample-flask-docker/values.yaml  ocp-sample-flask-docker/values.y
 *** ocp-sample-flask-docker/values.yaml	2021-05-18 19:57:46.715478952 +0200
 --- ocp-sample-flask-docker/values.yaml.cln	2021-05-18 19:55:57.141159397 +0200
 ***************
-*** 5,11 ****
+*** 5,14 ****
   replicaCount: 1
   
   image:
 !   repository: docker.io/sjfke/ocp-sample-flask-docker
     pullPolicy: IfNotPresent
     # Overrides the image tag whose default is the chart appVersion.
-    tag: ""
---- 5,11 ----
+!   tag: "latest"
+  
+  imagePullSecrets: []
+  nameOverride: ""
+--- 5,14 ----
   replicaCount: 1
   
   image:
 !   repository: nginx
     pullPolicy: IfNotPresent
     # Overrides the image tag whose default is the chart appVersion.
-    tag: ""
+!   tag: ""
+  
+  imagePullSecrets: []
+  nameOverride: ""
 ***************
 *** 38,44 ****
   
@@ -223,6 +230,7 @@ Make sure you are logged into the appropriate container hub, in my case DockerHu
 and then create a new OCP project.
  
 ```bash
+$ oc whoami   # kubeadmin
 $ oc new-project sample-flask-helm
 
 $ helm list
@@ -261,37 +269,147 @@ lazy-dog	sample-flask-docker	1       	2021-05-05 15:06:10.156623992 +0200 CEST	d
 $ helm get manifest lazy-dog # check the manifest
 
 
-$ oc whoami   # kubeadmin
 $ oc project  # Using project "sample-flask-docker" on server "https://api.crc.testing:6443".
 
 $ oc get all
-NAME                                    READY   STATUS    RESTARTS   AGE
-pod/lazy-dog-mychart-5446c598d5-vd8xs   1/1     Running   0          55m
+NAME                                                    READY   STATUS    RESTARTS   AGE
+pod/lazy-dog-ocp-sample-flask-docker-66f5b84897-lmv7f   1/1     Running   0          4m22s
 
-NAME                       TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)    AGE
-service/lazy-dog-mychart   ClusterIP   10.217.5.73   <none>        8080/TCP   55m
+NAME                                       TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)    AGE
+service/lazy-dog-ocp-sample-flask-docker   ClusterIP   10.217.5.37   <none>        8080/TCP   4m22s
 
-NAME                               READY   UP-TO-DATE   AVAILABLE   AGE
-deployment.apps/lazy-dog-mychart   1/1     1            1           55m
+NAME                                               READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/lazy-dog-ocp-sample-flask-docker   1/1     1            1           4m22s
 
-NAME                                          DESIRED   CURRENT   READY   AGE
-replicaset.apps/lazy-dog-mychart-5446c598d5   1         1         1       55m
+NAME                                                          DESIRED   CURRENT   READY   AGE
+replicaset.apps/lazy-dog-ocp-sample-flask-docker-66f5b84897   1         1         1       4m22s
 
-$ oc expose service/lazy-dog-mychart  # route.route.openshift.io/lazy-dog-mychart exposed
+$ oc expose service/lazy-dog-ocp-sample-flask-docker
+route.route.openshift.io/lazy-dog-ocp-sample-flask-docker exposed
 
-$ firefox http://lazy-dog-mychart-sample-flask-docker.apps-crc.testing/
+# URL: http://<service-name>-<project-name>.apps-crc.testing/
+$ firefox http://lazy-dog-ocp-sample-flask-docker-sample-flask-helm.apps-crc.testing/
 ```
 
 ### Uninstall
 
 ```bash
 $ helm list
-NAME    	NAMESPACE          	REVISION	UPDATED                                 	STATUS  	CHART        	APP VERSION
-lazy-dog	sample-flask-docker	1       	2021-05-05 15:06:10.156623992 +0200 CEST	deployed	mychart-0.1.0	0.1.0      
+NAME    	NAMESPACE        	REVISION	UPDATED                                 	STATUS  	CHART                        	APP VERSION
+lazy-dog	sample-flask-helm	1       	2021-05-26 18:31:29.634961692 +0200 CEST	deployed	ocp-sample-flask-docker-0.1.0	0.1.0      
 
-$ helm uninstall lazy-dog # release "lazy-dog" uninstalled
+$ helm uninstall lazy-dog
+release "lazy-dog" uninstalled
 
 $ helm list -all
 NAME	NAMESPACE	REVISION	UPDATED	STATUS	CHART	APP VERSION
 ```
+### Provenance and Integrity
+
+Helm has [provenance tools](https://helm.sh/docs/topics/provenance/) which help chart users verify the integrity and origin of a package.
+These are based on industry-standard tools based on PKI, GnuPG, and well-respected package managers, Helm can generate and verify signature files.
+
+* [A valid PGP keypairi](https://docs.github.com/en/github/authenticating-to-github/generating-a-new-gpg-key) in a binary (not ASCII-armored) format
+* [The helm command line tool](https://helm.sh/docs/helm/helm/)
+* [GnuPG command line tools](https://www.tutorialspoint.com/unix_commands/gpg.htm)
+* [Keybase command line tools](https://book.keybase.io/guides/command-line) (optional)
+
+#### Generate the GPG keys
+
+```bash
+$ gpg --list-secret-keys  # creates everything if the first time
+gpg: directory '/home/gcollis/.gnupg' created
+gpg: keybox '/home/gcollis/.gnupg/pubring.kbx' created
+gpg: /home/gcollis/.gnupg/trustdb.gpg: trustdb created
+
+gcollis@morpheus work07]$ gpg --full-generate-key
+gpg (GnuPG) 2.2.25; Copyright (C) 2020 Free Software Foundation, Inc.
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+
+Please select what kind of key you want:
+   (1) RSA and RSA (default)
+....
+
+$ tree /home/gcollis/.gnupg/
+/home/gcollis/.gnupg/
+├── openpgp-revocs.d
+│   └── 2722B192EAAF3412D30CDC4810DBA57F355F960F.rev
+├── private-keys-v1.d
+│   ├── 8FC27FEFEF03DB8F7346EA6E52752D0B390E134C.key
+│   └── A4E2C18B175DB835C43535F6362EBC7F03709B33.key
+├── pubring.kbx
+├── pubring.kbx~
+└── trustdb.gpg
+
+$ gpg --version
+gpg (GnuPG) 2.2.25
+libgcrypt 1.8.7
+Copyright (C) 2020 Free Software Foundation, Inc.
+....
+
+# If GnuPG version 2, it uses .kbx for key-rings, helm needs old .gpg format 
+$ gpg --export >~/.gnupg/pubring.gpg
+$ gpg --export-secret-keys >~/.gnupg/secring.gpg
+
+$ tree ~/.gnupg/
+/home/gcollis/.gnupg/
+├── openpgp-revocs.d
+│   └── 2722B192EAAF3412D30CDC4810DBA57F355F960F.rev
+├── private-keys-v1.d
+│   ├── 8FC27FEFEF03DB8F7346EA6E52752D0B390E134C.key
+│   └── A4E2C18B175DB835C43535F6362EBC7F03709B33.key
+├── pubring.gpg
+├── pubring.kbx
+├── pubring.kbx~
+├── secring.gpg
+└── trustdb.gpg
+```
+
+With GPG key-pair generated, now sign/validate the helm chart.
+
+```bash
+$ helm package --sign --key 'Sjfke' --keyring ~/.gnupg/secring.gpg ocp-sample-flask-docker/
+Password for key "Sjfke <gcollis@ymail.com>" >  
+Successfully packaged chart and saved it to: /home/gcollis/work08/ocp-sample-flask-docker-0.1.0.tgz
+
+$ ls -1
+LICENSE
+ocp-sample-flask-docker
+ocp-sample-flask-docker-0.1.0.tgz
+ocp-sample-flask-docker-0.1.0.tgz.prov
+
+$ helm verify ocp-sample-flask-docker-0.1.0.tgz
+Signed by: Sjfke <gcollis@ymail.com>
+Using Key With Fingerprint: 2722B192EAAF3412D30CDC4810DBA57F355F960F
+Chart Hash Verified: sha256:fb430dadf740baeb0d83c9ad0e5fc65d8cb0843568e556651cc3212174b8e4a7
+
+$ helm install lazy-dog --verify ocp-sample-flask-docker-0.1.0.tgz
+NAME: lazy-dog
+LAST DEPLOYED: Mon May 24 18:24:25 2021
+NAMESPACE: sample-flask-helm
+STATUS: deployed
+REVISION: 1
+NOTES:
+1. Get the application URL by running these commands:
+  export POD_NAME=$(oc get pods --namespace sample-flask-helm -l "app.kubernetes.io/name=ocp-sample-flask-docker,app.kubernetes.io/instance=lazy-dog" -o jsonpath="{.items[0].metadata.name}")
+  export CONTAINER_PORT=$(oc get pod --namespace sample-flask-helm $POD_NAME -o jsonpath="{.spec.containers[0].ports[0].containerPort}")
+  echo "Visit http://127.0.0.1:8080 to use your application"
+  oc --namespace sample-flask-helm port-forward $POD_NAME 8080:$CONTAINER_PORT
+[gcollis@morpheus work08]$ oc get all
+NAME                                                    READY   STATUS              RESTARTS   AGE
+pod/lazy-dog-ocp-sample-flask-docker-564965c65c-pgr8k   0/1     ContainerCreating   0          6s
+
+NAME                                       TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)    AGE
+service/lazy-dog-ocp-sample-flask-docker   ClusterIP   10.217.5.48   <none>        8080/TCP   7s
+
+NAME                                               READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/lazy-dog-ocp-sample-flask-docker   0/1     1            0           7s
+
+NAME                                                          DESIRED   CURRENT   READY   AGE
+replicaset.apps/lazy-dog-ocp-sample-flask-docker-564965c65c   1         1         0       7s
+
+$ firefox http://lazy-dog-ocp-sample-flask-docker.apps-crc.testing/
+```
+
 
