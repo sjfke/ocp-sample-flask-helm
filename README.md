@@ -2,13 +2,17 @@
 
 Demonstrates how to create a Helm chart using Docker containers from [Podman built Flask Docker container, deployed to OpenShift](https://github.com/sjfke/ocp-sample-flask-docker) used to demonstrate deployment of Python web applications to OpenShift 4 using Podman.
 
-The [ocp-sample-flask-docker containers are on DockerHub](https://hub.docker.com/repository/docker/sjfke/ocp-sample-flask-docker), notice there are three version
+The simple [Python Flask web application used](https://github.com/sjfke/ocp-sample-flask-docker) which is going to be 
+deployed using helm, is implemented using the Flask web framework and executed using ``gunicorn``, and provides static
+``Lorem Ipsum`` pages in various styles. 
+
+Various pre-built [docker containers are available on DockerHub](https://hub.docker.com/repository/docker/sjfke/ocp-sample-flask-docker), notice there are three version
 ``v.0.1.0``, ``v.0.1.1`` and ``v.0.1.2`` which are identical apart from the version number at the bottom of the displayed page. 
-A ``Helm chart`` is generated for  ``v.0.1.0`` and then changed to support the other versions to demonstrate 
+
+A ``Helm chart`` will be generated for  ``v.0.1.0`` and then changed to support the other versions to demonstrate 
 [helm upgrade](https://helm.sh/docs/helm/helm_upgrade/) and [helm rollback](https://helm.sh/docs/helm/helm_rollback/)
 
-
-## Deployment Steps
+## OpenShift Environment
 
 The deployment was tested using *Red Hat CodeReady Containers* (CRC) details of which can be found here:
 
@@ -22,12 +26,12 @@ A typical CRC cluster session:
 $ crc start                 # start the cluster, go have coffee! this takes awhile
 $ crc status                # is the cluster running?
 $ crc console --credentials # get login credentials
-
 $ oc login -u kubeadmin -p <password> https://api.crc.testing:6443
-$ oc whoami   # kubeadmin
-$ oc project  # current project
-$ oc logout   # logout
-$ crc stop    # shutdown the cluster
+$ oc whoami                 # kubeadmin
+$ oc project                # current project
+
+$ oc logout                 # logout
+$ crc stop                  # shutdown the cluster
 ```
 
 To obtain the default CRC ``kubeadmin`` password, use the following command.
@@ -71,8 +75,9 @@ Some useful references:
 
 * [Helm Quickstart Guide](https://v2.helm.sh/docs/using_helm/)
 * [Helm Documentation](https://v2.helm.sh/docs/)
-* [Helm Arcitecture](https://helm.sh/docs/topics/architecture/)
+* [Helm Architecture](https://helm.sh/docs/topics/architecture/)
 * [Getting started with Helm 3 on OpenShift Container Platform](https://docs.openshift.com/container-platform/4.6/cli_reference/helm_cli/getting-started-with-helm-on-openshift-container-platform.html)
+* [Simple Kubernetes Helm Charts Tutorial with Examples](https://www.golinuxcloud.com/kubernetes-helm-charts/)
 
 ## Helm Chart Creation
 
@@ -202,20 +207,14 @@ $ mv ocp-sample-flask-docker/templates/NOTES.txt ocp-sample-flask-docker/templat
 $ sed 's/kubectl/oc/g' ocp-sample-flask-docker/templates/NOTES.txt.cln > ocp-sample-flask-docker/templates/NOTES.txt
 $ rm ocp-sample-flask-docker/templates/NOTES.txt.cln
 ```
-# Helm Local Build and Test
+# Build and Test the Helm Chart
 
 Unless you have already fetched the required images, pull them now:
 
 ```bash
-$ podman pull sjfke/ocp-sample-flask-docker:v0.1.0
-$ podman pull sjfke/ocp-sample-flask-docker:v0.1.1
-$ podman pull sjfke/ocp-sample-flask-docker:v0.1.2
-
-# should not need this
-# Make sure you are logged into the appropriate container hub, in my case DockerHub,
-$ podman login docker.io
-Username: <yosjfke
-Password: 
+$ podman pull docker.io/sjfke/ocp-sample-flask-docker:v0.1.0 # Pull from DockerHub (docker.io - prefix)
+$ podman pull docker.io/sjfke/ocp-sample-flask-docker:v0.1.1
+$ podman pull docker.io/sjfke/ocp-sample-flask-docker:v0.1.2
 ```
 
 and then create a new OCP project.
@@ -227,10 +226,11 @@ $ oc new-project sample-flask-helm
 $ helm list
 NAME	NAMESPACE	REVISION	UPDATED	STATUS	CHART	APP VERSION
 
-$ helm lint ocp-sample-flask-docker
+$ helm lint ocp-sample-flask-docker                               # lint the helm chart
+$ helm install --dry-run --debug lazy-dog ocp-sample-flask-docker # dry-run with debugging
+$ helm get manifest lazy-dog                                      # check the manifest, expanded install scripts
 
-$ helm install --dry-run --debug lazy-dog ocp-sample-flask-docker
-
+# install using the helm-chart
 gcollis@morpheus work08]$ helm install lazy-dog ocp-sample-flask-docker
 NAME: lazy-dog
 LAST DEPLOYED: Wed May 19 09:50:54 2021
@@ -256,9 +256,6 @@ View details with 'oc describe <resource>/<name>' or list resources with 'oc get
 $ helm list
 NAME    	NAMESPACE          	REVISION	UPDATED                                 	STATUS  	CHART        	APP VERSION
 lazy-dog	sample-flask-docker	1       	2021-05-05 15:06:10.156623992 +0200 CEST	deployed	mychart-0.1.0	0.1.0      
-
-$ helm get manifest lazy-dog # check the manifest
-
 
 $ oc project  # Using project "sample-flask-docker" on server "https://api.crc.testing:6443".
 
