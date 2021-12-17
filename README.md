@@ -1,13 +1,18 @@
+# ** Under Construction **
+
+## **** DO NOT CLONE ****
+
 # Helm: Simple Flask Example
 
-Demonstrates how to create a Helm chart using Docker containers from [Podman built Flask Docker container, deployed to OpenShift](https://github.com/sjfke/ocp-sample-flask-docker) used to demonstrate deployment of Python web applications to OpenShift 4 using Podman.
+Demonstrates how to use and create a Helm chart using Docker containers.
 
-The simple [Python Flask web application used](https://github.com/sjfke/ocp-sample-flask-docker) which is going to be 
-deployed using helm, is implemented using the Flask web framework and executed using ``gunicorn``, and provides static
-``Lorem Ipsum`` pages in various styles. 
+The example is taken [Build Flask Docker container and deploy to OpenShift](https://github.com/sjfke/ocp-sample-flask-docker)
+which is a simple Python Flask web application used which provides static ``Lorem Ipsum`` pages in various styles. 
 
-Various pre-built [docker containers are available on DockerHub](https://hub.docker.com/repository/docker/sjfke/ocp-sample-flask-docker), notice there are three version
-``v.0.1.0``, ``v.0.1.1`` and ``v.0.1.2`` which are identical apart from the version number at the bottom of the displayed page. 
+Various pre-built docker containers are available on [DockerHub](https://hub.docker.com/repository/docker/sjfke/flask-lorem-ipsum), 
+and [Quay IO](https://quay.io/repository/sjfke/flask-lorem-ipsum). Notice there are three version
+``v.0.1.0``, ``v.0.2.0`` and ``v.0.3.0`` which are identical apart from the version number and a different 
+[bootstrap 4 color theme](https://bootstrap.themes.guide/). 
 
 A ``Helm chart`` will be generated for  ``v.0.1.0`` and then changed to support the other versions to demonstrate 
 [helm upgrade](https://helm.sh/docs/helm/helm_upgrade/) and [helm rollback](https://helm.sh/docs/helm/helm_rollback/)
@@ -44,9 +49,9 @@ $ crc console --credentials
 
 If using CRC [Getting started with Helm 3 on OpenShift Container Platform](https://docs.openshift.com/container-platform/4.6/cli_reference/helm_cli/getting-started-with-helm-on-openshift-container-platform.html) otherwise follow [download the required executable](https://github.com/helm/helm/releases) or [Helm Installation](https://v2.helm.sh/docs/install/).
 
-``Helm`` interacts with * your kubernetes cluster, so your cluster needs to be is up and running, and you need to be logged in!
+``Helm`` interacts with your kubernetes cluster, so your cluster needs to be is up and running, and you need to be logged in!
 
-Note: ``Helm Version 3`` only has a ``helm`` command line client, whereas ``Helm Version 2`` also had a cluster server component ``tiller``.
+Note: ``Helm Version 3`` is integrated with CRC and only has a ``helm`` command line client.
 
 Installation involves downloading and unpacking the appropriate archive.
 
