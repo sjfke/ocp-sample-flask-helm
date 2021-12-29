@@ -47,33 +47,34 @@ $ crc console --credentials
 
 ## Helm Installation
 
-If using CRC [Getting started with Helm 3 on OpenShift Container Platform](https://docs.openshift.com/container-platform/4.6/cli_reference/helm_cli/getting-started-with-helm-on-openshift-container-platform.html) otherwise follow [download the required executable](https://github.com/helm/helm/releases) or [Helm Installation](https://v2.helm.sh/docs/install/).
-
 ``Helm`` interacts with your kubernetes cluster, so your cluster needs to be is up and running, and you need to be logged in!
 
-Note: ``Helm Version 3`` is integrated with CRC and only has a ``helm`` command line client.
+Note: CRC integrates ``Helm Version 3`` so only requires the ``helm`` command line client.
 
-Installation involves downloading and unpacking the appropriate archive.
+Easiest way to obtain the correct version is directly from the CRC Console WebUI, using ``?`` and select *Command line tools*.
+
+![Image CRC Console CLI tools](./screenshots/crc-cli-tools.png)
+
+Alternative approaches:
+* [Getting started with Helm 3 on OpenShift Container Platform](https://docs.openshift.com/container-platform/4.6/cli_reference/helm_cli/getting-started-with-helm-on-openshift-container-platform.html);
+* [Download the latest GitHub helm executable](https://github.com/helm/helm/releases);
+* [Follow the Helm Installation guide](https://helm.sh/docs/intro/install/).
+
+Example of downloading, unpacking and installing an archive into ``$HOME/bin``.
 
 ```bash
 $ curl -L https://mirror.openshift.com/pub/openshift-v4/clients/helm/latest/helm-linux-amd64 -o $HOME/bin/helm
 $ chmod +x $HOME/bin/helm
 $ helm version
 version.BuildInfo{Version:"v3.5.0+6.el8", GitCommit:"77fb4bd2415712e8bfebe943389c404893ad53ce", GitTreeState:"clean", GoVersion:"go1.14.12"}
+```
 
-$ $HOME/bin/helm init --client-only # creates $HOME/.helm
-$ tree $HOME/.helm
-/home/gcollis/.helm
-├── cache
-│   └── archive
-├── plugins
-├── repository
-│   ├── cache
-│   └── local
-└── starters
-
+```bash
 $ helm repo add stable https://charts.helm.sh/stable # register Artifact Hub (https://artifacthub.io/)
 $ helm repo update                                   # ensure your charts up to date
+Hang tight while we grab the latest from your chart repositories...
+...Successfully got an update from the "stable" chart repository
+Update Complete. ⎈Happy Helming!⎈
 ```
 
 Some useful references:
@@ -91,10 +92,11 @@ This approach is based on [Deploy a Go Application on Kubernetes with Helm](http
 First login to your cluster, then:
 
 ```bash
-$ helm create ocp-sample-flask-docker
+$ helm create flask-lorem-ipsum
+Creating flask-lorem-ipsum
 
-$ tree ocp-sample-flask-docker/
-ocp-sample-flask-docker/
+$ tree flask-lorem-ipsum/
+flask-lorem-ipsum/
 ├── charts
 ├── Chart.yaml
 ├── templates
@@ -111,59 +113,136 @@ ocp-sample-flask-docker/
 
 3 directories, 10 files
 ```
-This creates a helm-chart based on ``nginx``, version ``1.16.0`` as shown above.
-This chart (set of files and folders) needs to be edited, to change the values for our application.
+This creates a helm-chart, a folder/file structure based on ``nginx``, version ``1.16.0`` as will be shown below.
 
-**Note:** 
+Folder (chart) structure
+* Chart.yaml - chart/application version;
+* values.yaml - where to specify parameterized values for templates folder;
+* charts folder - deprecated way to specify dependent helm charts;
+* tests folder - pre/post-deployment tests (rarely used)
+* templates folder - series of yaml (applied in a specific order) and helper (go-lang based) scripts
 
-* Do not try to install it, the chart is very old and generates errors;
-* Changes to these files have a suffix comment like ``# was: "1.16.0"``, better to remove them;
-* There is no guarantee the line numbers will match exactly.
-* Helm YAML indentation is ``two white-space characters``! 
+**NOTE:** Helm YAML indentation is ``two white-space characters``! 
 
-### Update Chart.yaml (describes the helm-chart and its version)
-
-The *name* is used throughout the template files, so do not change it, regenerate with the correct name if wrong.
-
-Update the **appVersion** (*string in quotes*), the generated default matches an early version of nginx.
-
-**Note:** 
-* *appVersion* should be incremented each time application is modified.
-
+Looking first at ``Chart.yaml`` with all the default comments removed, and mine added.
 
 ```bash
-20:# This is the version number of the application being deployed. This version number should be
-21:# incremented each time you make changes to the application. Versions are not expected to
-22:# follow Semantic Versioning. They should reflect the version the application is using.
-23:# It is recommended to use it with quotes.
-24:appVersion: "0.1.0" # was: "1.16.0"
+apiVersion: v2                           # helm api version
+name: flask-lorem-ipsum                  # chart name (recreate the chart to change this)
+description: A Helm chart for Kubernetes # default description
+type: application                        # chart type (application or library)
+version: 0.1.0                           # chart version (SemVer https://semver.org/)
+appVersion: "1.16.0"                     # application version (SemVer optional)
 ```
 
-### Update values.yaml (parameter values used in templates folder)
+Looking at ``values.yaml`` which provides values to the templates folder, edited to leave only the salient parts and add my comments. 
 
-**Note:**
-* *repository* and *tag* must match that on DockerHub otherwise it will not deploy.
+```bash
+replicaCount: 1             # minimum number to run the application
+
+image:                      # how to identify the docker container
+  repository: nginx
+  pullPolicy: IfNotPresent  # fetch: IfNotPresent, Always, Never
+  tag: ""                   # Overrides chart appVersion.
+
+imagePullSecrets: []        # remote repository login credentials
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:             # account used to run the application
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}          # arbitrary key/value pairs, typically used by Prometheus service discovery 
+
+podSecurityContext: {}      # https://cloud.redhat.com/blog/guide-to-kubernetes-security-context-pod-security-policy-psp
+
+securityContext: {}         # https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+
+service:                    # https://kubernetes.io/docs/concepts/services-networking/connect-applications-service/
+  type: ClusterIP           # Internal cluster IP, (alternatives: NodePort, LoadBalancer)
+  port: 80                  # Port service listens on (typically 8080)
+
+ingress:                    # Expose outside the cluster (https://cloud.redhat.com/blog/kubernetes-ingress-vs-openshift-route)
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+  
+resources: {}
+
+autoscaling:               # How/when to scale the application (add/remove pods)
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+```
+
+This chart (set of files and folders) and the values in ``Chart.yaml``and ``values.yaml`` need to be edited for our application.
+
+## Updating the helm chart for the *flask-lorem-ipsum* application
+
+### Update Chart.yaml
+
+Summary of changes:
+* change ``appVersion: "v0.1.0"``
+
+```bash
+    20	# This is the version number of the application being deployed. This version number should be
+    21	# incremented each time you make changes to the application. Versions are not expected to
+    22	# follow Semantic Versioning. They should reflect the version the application is using.
+    23	# It is recommended to use it with quotes.
+    24	appVersion: "v0.1.0" # was: "1.16.0"
+```
+* The *name* is hard-coded throughout the template files: 
+  * Changing it requires regenerating ``helm create ...`` with the correct name;
+* Update the **appVersion** (*string in quotes*), the default matches an early version of nginx;
+  * *appVersion* should be incremented each time application is modified;
+
+
+### Update values.yaml
 
 Summary of changes:
 * add ``livenessProbePath``, ``readinessProbePath`` and ``containerPort``
 * change ``repository: docker.io/sjfke/ocp-sample-flask-docker``
-* change ``tag: "v0.1.0"``
+* change ``tag: "v0.1.0"`` (overruling Chart.yaml)
+
+**Note:**
+  * Helm YAML indentation is ``two white-space characters``! 
+  * *repository* and *tag* must match that on [DockerHub](https://hub.docker.com/repository/docker/sjfke/flask-lorem-ipsum) otherwise it will not deploy.
 
 ```bash
- 1:# Default values for ocp-sample-flask-docker.
- 2:# This is a YAML-formatted file.
- 3:# Declare variables to be passed into your templates.
- 4:
- 5:livenessProbePath: "/isalive"  # new: line added
- 6:readinessProbePath: "/isready" # new: line added
- 7:containerPort: 8080            # new: line added
- 8:replicaCount: 1
- 9:
-10:image:
-11:  repository: docker.io/sjfke/ocp-sample-flask-docker # was: nginx
-12:  pullPolicy: IfNotPresent
-13:  # Overrides the image tag whose default is the chart appVersion.
-14:  tag: "v0.1.0" # was: ""
+     1	# Default values for flask-lorem-ipsum.
+     2	# This is a YAML-formatted file.
+     3	# Declare variables to be passed into your templates.
+     4	
+     5	livenessProbePath: "/isalive"  # new: line added
+     6	readinessProbePath: "/isready" # new: line added
+     7	containerPort: 8080            # new: line added
+     8	
+     9	replicaCount: 1
+    10	
+    11	image:
+    12	  repository: nginx
+    13	  pullPolicy: IfNotPresent
+    14	  # Overrides the image tag whose default is the chart appVersion.
+    15	  tag: "v0.1.0" # was: ""
+    16	
+    17	imagePullSecrets: []
+    18	nameOverride: ""
+    19	fullnameOverride: ""
 ```
 
 
@@ -177,25 +256,26 @@ Summary of changes:
 * if specified read ``containerPort`` from *values.yaml*, or keep the default;
 
 ```bash
-30:      containers:
-31:        - name: {{ .Chart.Name }}
-32:          securityContext:
-33:            {{- toYaml .Values.securityContext | nindent 12 }}
-34:          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-35:          imagePullPolicy: {{ .Values.image.pullPolicy }}
-36:          ports:
-37:            - name: http
-38:              containerPort: {{ .Values.containerPort | default 80 }} # was: containerPort: 80
-39:              protocol: TCP
-40:          livenessProbe:
-41:            httpGet:
-42:              path: {{ .Values.livenessProbePath | default "/" }} # was: path: /
-43:              port: http
-44:          readinessProbe:
-45:            httpGet:
-46:              path: {{ .Values.readinessProbePath | default "/" }} # was: path: /
-47:              port: http
-48:          resources:
+    30	      containers:
+    31	        - name: {{ .Chart.Name }}
+    32	          securityContext:
+    33	            {{- toYaml .Values.securityContext | nindent 12 }}
+    34	          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+    35	          imagePullPolicy: {{ .Values.image.pullPolicy }}
+    36	          ports:
+    37	            - name: http
+    38	              containerPort: {{ .Values.containerPort | default 80 }} # was: containerPort: 80
+    39	              protocol: TCP
+    40	          livenessProbe:
+    41	            httpGet:
+    42	              path: {{ .Values.livenessProbePath | default "/" }} # was: path: /
+    43	              port: http
+    44	          readinessProbe:
+    45	            httpGet:
+    46	              path: {{ .Values.readinessProbePath | default "/" }} # was: path: /
+    47	              port: http
+    48	          resources:
+    49	            {{- toYaml .Values.resources | nindent 12 }}
 ```
 
 ### Update template/Notes.txt
@@ -208,18 +288,20 @@ Summary of changes:
 * Windows: use [select-string](https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/select-string) instead of ``sed``;
 
 ```bash
-$ mv ocp-sample-flask-docker/templates/NOTES.txt ocp-sample-flask-docker/templates/NOTES.txt.cln 
-$ sed 's/kubectl/oc/g' ocp-sample-flask-docker/templates/NOTES.txt.cln > ocp-sample-flask-docker/templates/NOTES.txt
-$ rm ocp-sample-flask-docker/templates/NOTES.txt.cln
+$ cd flask-lorem-ipsum]
+$ mv templates/NOTES.txt templates/NOTES.txt.cln
+$ sed 's/kubectl/oc/g' templates/NOTES.txt.cln > templates/NOTES.txt
+$ rm templates/NOTES.txt.cln
 ```
 # Build and Test the Helm Chart
 
-Unless you have already fetched the required images, pull them now:
+Unless you have already fetched the required images, pull them now (with *podman* or *docker*):
 
 ```bash
-$ podman pull docker.io/sjfke/ocp-sample-flask-docker:v0.1.0 # Pull from DockerHub (docker.io - prefix)
-$ podman pull docker.io/sjfke/ocp-sample-flask-docker:v0.1.1
-$ podman pull docker.io/sjfke/ocp-sample-flask-docker:v0.1.2
+$ podman login docker.io
+$ podman pull docker.io/sjfke/flask-lorem-ipsum:v0.1.0
+$ podman pull docker.io/sjfke/flask-lorem-ipsum:v0.2.0
+$ podman pull docker.io/sjfke/flask-lorem-ipsum:v0.3.0
 ```
 
 and then create a new OCP project.
