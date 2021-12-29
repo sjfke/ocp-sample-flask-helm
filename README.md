@@ -47,33 +47,34 @@ $ crc console --credentials
 
 ## Helm Installation
 
-If using CRC [Getting started with Helm 3 on OpenShift Container Platform](https://docs.openshift.com/container-platform/4.6/cli_reference/helm_cli/getting-started-with-helm-on-openshift-container-platform.html) otherwise follow [download the required executable](https://github.com/helm/helm/releases) or [Helm Installation](https://v2.helm.sh/docs/install/).
-
 ``Helm`` interacts with your kubernetes cluster, so your cluster needs to be is up and running, and you need to be logged in!
 
-Note: ``Helm Version 3`` is integrated with CRC and only has a ``helm`` command line client.
+Note: CRC integrates ``Helm Version 3`` so only requires the ``helm`` command line client.
 
-Installation involves downloading and unpacking the appropriate archive.
+Easiest way to obtain the correct version is directly from the CRC Console WebUI, using ``?`` and select *Command line tools*.
+
+![Image CRC Console CLI tools](./screenshots/crc-cli-tools.png)
+
+Alternative approaches:
+* [Getting started with Helm 3 on OpenShift Container Platform](https://docs.openshift.com/container-platform/4.6/cli_reference/helm_cli/getting-started-with-helm-on-openshift-container-platform.html);
+* [Download the latest GitHub helm executable](https://github.com/helm/helm/releases);
+* [Follow the Helm Installation guide](https://helm.sh/docs/intro/install/).
+
+Example of downloading, unpacking and installing an archive into ``$HOME/bin``.
 
 ```bash
 $ curl -L https://mirror.openshift.com/pub/openshift-v4/clients/helm/latest/helm-linux-amd64 -o $HOME/bin/helm
 $ chmod +x $HOME/bin/helm
 $ helm version
 version.BuildInfo{Version:"v3.5.0+6.el8", GitCommit:"77fb4bd2415712e8bfebe943389c404893ad53ce", GitTreeState:"clean", GoVersion:"go1.14.12"}
+```
 
-$ $HOME/bin/helm init --client-only # creates $HOME/.helm
-$ tree $HOME/.helm
-/home/gcollis/.helm
-├── cache
-│   └── archive
-├── plugins
-├── repository
-│   ├── cache
-│   └── local
-└── starters
-
+```bash
 $ helm repo add stable https://charts.helm.sh/stable # register Artifact Hub (https://artifacthub.io/)
 $ helm repo update                                   # ensure your charts up to date
+Hang tight while we grab the latest from your chart repositories...
+...Successfully got an update from the "stable" chart repository
+Update Complete. ⎈Happy Helming!⎈
 ```
 
 Some useful references:
