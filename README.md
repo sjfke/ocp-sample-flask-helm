@@ -11,10 +11,10 @@ which is a simple Python Flask web application used which provides static ``Lore
 
 Various pre-built docker containers are available on [DockerHub](https://hub.docker.com/repository/docker/sjfke/flask-lorem-ipsum), 
 and [Quay IO](https://quay.io/repository/sjfke/flask-lorem-ipsum). Notice there are three version
-``v.0.1.0``, ``v.0.2.0`` and ``v.0.3.0`` which are identical apart from the version number and a different 
+``v0.1.0``, ``v0.2.0`` and ``v0.3.0`` which are identical apart from the version number and a different 
 [bootstrap 4 color theme](https://bootstrap.themes.guide/). 
 
-A ``Helm chart`` will be generated for  ``v.0.1.0`` and then changed to support the other versions to demonstrate 
+A ``Helm chart`` will be generated for  ``v0.1.0`` and then changed to support the other versions to demonstrate 
 [helm upgrade](https://helm.sh/docs/helm/helm_upgrade/) and [helm rollback](https://helm.sh/docs/helm/helm_rollback/)
 
 ## OpenShift Environment
@@ -89,7 +89,7 @@ Some useful references:
 
 This approach is based on [Deploy a Go Application on Kubernetes with Helm](https://docs.bitnami.com/tutorials/deploy-go-application-kubernetes-helm/)
 
-First login to your cluster, then:
+First login to your cluster as ``kubeadmin``, then:
 
 ```bash
 $ helm create flask-lorem-ipsum
@@ -113,12 +113,12 @@ flask-lorem-ipsum/
 
 3 directories, 10 files
 ```
-This creates a helm-chart, a folder/file structure based on ``nginx``, version ``1.16.0`` as will be shown below.
+This creates a helm-chart, a folder/file structure, that is for ``nginx``, version ``1.16.0``, that does not install without modifications.
 
-Folder (chart) structure
+Chart (folder) structure
 * Chart.yaml - chart/application version;
 * values.yaml - where to specify parameterized values for templates folder;
-* charts folder - deprecated way to specify dependent helm charts;
+* charts folder - deprecated way to specify subsidiary helm charts;
 * tests folder - pre/post-deployment tests (rarely used)
 * templates folder - series of yaml (applied in a specific order) and helper (go-lang based) scripts
 
@@ -132,13 +132,13 @@ name: flask-lorem-ipsum                  # chart name (recreate the chart to cha
 description: A Helm chart for Kubernetes # default description
 type: application                        # chart type (application or library)
 version: 0.1.0                           # chart version (SemVer https://semver.org/)
-appVersion: "1.16.0"                     # application version (SemVer optional)
+appVersion: "1.16.0"                     # application version (quoted string, SemVer format optional)
 ```
 
-Looking at ``values.yaml`` which provides values to the templates folder, edited to leave only the salient parts and add my comments. 
+Looking at ``values.yaml`` which provides values to the folder templates, edited to leave only the salient parts and add my comments. 
 
 ```bash
-replicaCount: 1             # minimum number to run the application
+replicaCount: 1             # minimum number of pods to run the application
 
 image:                      # how to identify the docker container
   repository: nginx
@@ -164,7 +164,7 @@ service:                    # https://kubernetes.io/docs/concepts/services-netwo
   type: ClusterIP           # Internal cluster IP, (alternatives: NodePort, LoadBalancer)
   port: 80                  # Port service listens on (typically 8080)
 
-ingress:                    # Expose outside the cluster (https://cloud.redhat.com/blog/kubernetes-ingress-vs-openshift-route)
+ingress:                    # Expose service outside the cluster (https://cloud.redhat.com/blog/kubernetes-ingress-vs-openshift-route)
   enabled: false
   className: ""
   annotations: {}
@@ -177,7 +177,7 @@ ingress:                    # Expose outside the cluster (https://cloud.redhat.c
   
 resources: {}
 
-autoscaling:               # How/when to scale the application (add/remove pods)
+autoscaling:               # When/how to scale the application (add/remove pods)
   enabled: false
   minReplicas: 1
   maxReplicas: 100
@@ -190,7 +190,8 @@ tolerations: []
 affinity: {}
 ```
 
-This chart (set of files and folders) and the values in ``Chart.yaml``and ``values.yaml`` need to be edited for our application.
+This chart (set of files and folders) needs to be modified for the *flask-lorem-ipsum* application, namely 
+editing the ``Chart.yaml``, ``values.yaml``, ``templates/deployment.yaml`` and ``templates/NOTES.txt`` files.
 
 ## Updating the helm chart for the *flask-lorem-ipsum* application
 
@@ -206,17 +207,16 @@ Summary of changes:
     23	# It is recommended to use it with quotes.
     24	appVersion: "v0.1.0" # was: "1.16.0"
 ```
-* The *name* is hard-coded throughout the template files: 
-  * Changing it requires regenerating ``helm create ...`` with the correct name;
 * Update the **appVersion** (*string in quotes*), the default matches an early version of nginx;
   * *appVersion* should be incremented each time application is modified;
-
+* **Note:** The *name* is hard-coded throughout the template files: 
+  * Changing it requires regenerating ``helm create ...`` with the new name;
 
 ### Update values.yaml
 
 Summary of changes:
-* add ``livenessProbePath``, ``readinessProbePath`` and ``containerPort``
-* change ``repository: docker.io/sjfke/ocp-sample-flask-docker``
+* add values ``livenessProbePath``, ``readinessProbePath`` and ``containerPort``
+* change the repository ``repository: docker.io/sjfke/flask-lorem-ipsum``
 * change ``tag: "v0.1.0"`` (overruling Chart.yaml)
 
 **Note:**
@@ -235,7 +235,7 @@ Summary of changes:
      9	replicaCount: 1
     10	
     11	image:
-    12	  repository: nginx
+    12	  repository: docker.io/sjfke/flask-lorem-ipsum # was: nginx
     13	  pullPolicy: IfNotPresent
     14	  # Overrides the image tag whose default is the chart appVersion.
     15	  tag: "v0.1.0" # was: ""
@@ -243,6 +243,8 @@ Summary of changes:
     17	imagePullSecrets: []
     18	nameOverride: ""
     19	fullnameOverride: ""
+    20	
+    21	serviceAccount:
 ```
 
 
@@ -278,7 +280,7 @@ Summary of changes:
     49	            {{- toYaml .Values.resources | nindent 12 }}
 ```
 
-### Update template/Notes.txt
+### Update templates/NOTES.txt
 
 The content of this file is displayed if the deployment is successful, but they reference ``kubectl`` (Kubernetes) and
 not ``oc`` (OpenShift Container Platform) commands.
@@ -293,6 +295,32 @@ $ mv templates/NOTES.txt templates/NOTES.txt.cln
 $ sed 's/kubectl/oc/g' templates/NOTES.txt.cln > templates/NOTES.txt
 $ rm templates/NOTES.txt.cln
 ```
+
+```bash
+     1	1. Get the application URL by running these commands:
+     2	{{- if .Values.ingress.enabled }}
+     3	{{- range $host := .Values.ingress.hosts }}
+     4	  {{- range .paths }}
+     5	  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
+     6	  {{- end }}
+     7	{{- end }}
+     8	{{- else if contains "NodePort" .Values.service.type }}
+     9	  export NODE_PORT=$(oc get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "flask-lorem-ipsum.fullname" . }})
+    10	  export NODE_IP=$(oc get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+    11	  echo http://$NODE_IP:$NODE_PORT
+    12	{{- else if contains "LoadBalancer" .Values.service.type }}
+    13	     NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+    14	           You can watch the status of by running 'oc get --namespace {{ .Release.Namespace }} svc -w {{ include "flask-lorem-ipsum.fullname" . }}'
+    15	  export SERVICE_IP=$(oc get svc --namespace {{ .Release.Namespace }} {{ include "flask-lorem-ipsum.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
+    16	  echo http://$SERVICE_IP:{{ .Values.service.port }}
+    17	{{- else if contains "ClusterIP" .Values.service.type }}
+    18	  export POD_NAME=$(oc get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "flask-lorem-ipsum.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+    19	  export CONTAINER_PORT=$(oc get pod --namespace {{ .Release.Namespace }} $POD_NAME -o jsonpath="{.spec.containers[0].ports[0].containerPort}")
+    20	  echo "Visit http://127.0.0.1:8080 to use your application"
+    21	  oc --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8080:$CONTAINER_PORT
+    22	{{- end }}
+```
+
 # Build and Test the Helm Chart
 
 Unless you have already fetched the required images, pull them now (with *podman* or *docker*):
@@ -307,44 +335,71 @@ $ podman pull docker.io/sjfke/flask-lorem-ipsum:v0.3.0
 and then create a new OCP project.
  
 ```bash
+$ ls -1l
+total 4
+drwxr-xr-x 4 sjfke sjfke 4096 Dec 30 10:17 flask-lorem-ipsum
+
+$ oc whoami  # kubeadmin
+$ oc new-project work01
+
+$ helm list
+NAME	NAMESPACE	REVISION	UPDATED	STATUS	CHART	APP VERSION
+$ helm lint flask-lorem-ipsum
+
 $ oc whoami   # kubeadmin
 $ oc new-project sample-flask-helm
 
 $ helm list
 NAME	NAMESPACE	REVISION	UPDATED	STATUS	CHART	APP VERSION
 
-$ helm lint ocp-sample-flask-docker                               # lint the helm chart
-$ helm install --dry-run --debug lazy-dog ocp-sample-flask-docker # dry-run with debugging
-$ helm get manifest lazy-dog                                      # check the manifest, expanded install scripts
+$ helm lint ocp-sample-flask-docker                          # lint the helm chart
+$ helm install --dry-run --debug lazy-dog flask-lorem-ipsum  # dry-run with debugging
+$ helm get manifest lazy-dog                                 # check the manifest, expanded install scripts
 
 # install using the helm-chart
-gcollis@morpheus work08]$ helm install lazy-dog ocp-sample-flask-docker
+$ helm install lazy-dog flask-lorem-ipsum
 NAME: lazy-dog
-LAST DEPLOYED: Wed May 19 09:50:54 2021
-NAMESPACE: sample-flask-docker
+LAST DEPLOYED: Thu Dec 30 10:39:26 2021
+NAMESPACE: work01
 STATUS: deployed
 REVISION: 1
 NOTES:
 1. Get the application URL by running these commands:
-  export POD_NAME=$(oc get pods --namespace sample-flask-docker -l "app.kubernetes.io/name=ocp-sample-flask-docker,app.kubernetes.io/instance=lazy-dog" -o jsonpath="{.items[0].metadata.name}")
-  export CONTAINER_PORT=$(oc get pod --namespace sample-flask-docker $POD_NAME -o jsonpath="{.spec.containers[0].ports[0].containerPort}")
+  export POD_NAME=$(oc get pods --namespace work01 -l "app.kubernetes.io/name=flask-lorem-ipsum,app.kubernetes.io/instance=lazy-dog" -o jsonpath="{.items[0].metadata.name}")
+  export CONTAINER_PORT=$(oc get pod --namespace work01 $POD_NAME -o jsonpath="{.spec.containers[0].ports[0].containerPort}")
   echo "Visit http://127.0.0.1:8080 to use your application"
-  oc --namespace sample-flask-docker port-forward $POD_NAME 8080:$CONTAINER_PORT
+  oc --namespace work01 port-forward $POD_NAME 8080:$CONTAINER_PORT
+
 
 $ oc status
-In project sample-flask-docker on server https://api.crc.testing:6443
+In project work01 on server https://api.crc.testing:6443
 
-svc/lazy-dog-mychart - 10.217.5.73:8080 -> http
-  deployment/lazy-dog-mychart deploys docker.io/sjfke/ocp-sample-flask-docker:latest
-    deployment #1 running for 10 seconds - 0/1 pods
+svc/lazy-dog-flask-lorem-ipsum - 10.217.4.249:80 -> http
+  deployment/lazy-dog-flask-lorem-ipsum deploys docker.io/sjfke/flask-lorem-ipsum:v0.1.0
+    deployment #1 running for 2 minutes - 1 pod
 
 View details with 'oc describe <resource>/<name>' or list resources with 'oc get all'.
 
 $ helm list
-NAME    	NAMESPACE          	REVISION	UPDATED                                 	STATUS  	CHART        	APP VERSION
-lazy-dog	sample-flask-docker	1       	2021-05-05 15:06:10.156623992 +0200 CEST	deployed	mychart-0.1.0	0.1.0      
+NAME    	NAMESPACE	REVISION	UPDATED                             	STATUS  	CHART                  	APP VERSION
+lazy-dog	work01   	1       	2021-12-30 10:39:26.117738 +0100 CET	deployed	flask-lorem-ipsum-0.1.0	v0.1.0     
 
-$ oc project  # Using project "sample-flask-docker" on server "https://api.crc.testing:6443".
+$ helm get manifest lazy-dog                                 # check the manifest, expanded install scripts
+
+$ oc project  # Using project "work01" on server "https://api.crc.testing:6443".
+
+$ oc get all
+NAME                                              READY   STATUS    RESTARTS   AGE
+pod/lazy-dog-flask-lorem-ipsum-7878dbb69c-mk88n   1/1     Running   0          7m46s
+
+NAME                                 TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)   AGE
+service/lazy-dog-flask-lorem-ipsum   ClusterIP   10.217.4.249   <none>        80/TCP    7m46s
+
+NAME                                         READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/lazy-dog-flask-lorem-ipsum   1/1     1            1           7m46s
+
+NAME                                                    DESIRED   CURRENT   READY   AGE
+replicaset.apps/lazy-dog-flask-lorem-ipsum-7878dbb69c   1         1         1       7m46s
 
 $ oc get all
 NAME                                                    READY   STATUS    RESTARTS   AGE
@@ -359,26 +414,50 @@ deployment.apps/lazy-dog-ocp-sample-flask-docker   1/1     1            1       
 NAME                                                          DESIRED   CURRENT   READY   AGE
 replicaset.apps/lazy-dog-ocp-sample-flask-docker-66f5b84897   1         1         1       4m22s
 
-$ oc expose service/lazy-dog-ocp-sample-flask-docker
-route.route.openshift.io/lazy-dog-ocp-sample-flask-docker exposed
+$ oc expose service/lazy-dog-flask-lorem-ipsum
+route.route.openshift.io/lazy-dog-flask-lorem-ipsum exposed
 
-# URL: http://<service-name>-<project-name>.apps-crc.testing/
-$ firefox http://lazy-dog-ocp-sample-flask-docker-sample-flask-helm.apps-crc.testing/
+$ oc get routes
+NAME                         HOST/PORT                                            PATH   SERVICES                     PORT   TERMINATION   WILDCARD
+lazy-dog-flask-lorem-ipsum   lazy-dog-flask-lorem-ipsum-work01.apps-crc.testing          lazy-dog-flask-lorem-ipsum   http                 None
+
+# URL: http://<service-name>-<project-name>.apps-crc.testing/ # see HOST/PORT column in 'oc get routes'
+$ firefox http://lazy-dog-flask-lorem-ipsum-work01.apps-crc.testing
+
+$ oc get pods # your pod name will be different
+NAME                                          READY   STATUS    RESTARTS   AGE
+lazy-dog-flask-lorem-ipsum-7878dbb69c-mk88n   1/1     Running   0          14m
+
+$ oc get pod lazy-dog-flask-lorem-ipsum-7878dbb69c-mk88n
+$ oc logs lazy-dog-flask-lorem-ipsum-7878dbb69c-mk88n
+$ oc describe pod lazy-dog-flask-lorem-ipsum-7878dbb69c-mk88n
+$ oc rsh lazy-dog-flask-lorem-ipsum-7878dbb69c-mk88n
 ```
+
+![Image Deployed Helm Chart](./screenshots/deployed-helm-chart.png)
 
 ### Uninstall
 
 ```bash
 $ helm list
-NAME    	NAMESPACE        	REVISION	UPDATED                                 	STATUS  	CHART                        	APP VERSION
-lazy-dog	sample-flask-helm	1       	2021-05-26 18:31:29.634961692 +0200 CEST	deployed	ocp-sample-flask-docker-0.1.0	0.1.0      
-
+NAME    	NAMESPACE	REVISION	UPDATED                             	STATUS  	CHART                  	APP VERSION
+lazy-dog	work01   	1       	2021-12-30 10:39:26.117738 +0100 CET	deployed	flask-lorem-ipsum-0.1.0	v0.1.0     
 $ helm uninstall lazy-dog
 release "lazy-dog" uninstalled
-
 $ helm list -all
 NAME	NAMESPACE	REVISION	UPDATED	STATUS	CHART	APP VERSION
+
+# Route not in helm chart, so have to manually delete it.
+$ oc get all
+NAME                                                  HOST/PORT                                            PATH   SERVICES                     PORT   TERMINATION   WILDCARD
+route.route.openshift.io/lazy-dog-flask-lorem-ipsum   lazy-dog-flask-lorem-ipsum-work01.apps-crc.testing          lazy-dog-flask-lorem-ipsum   http                 None
+
+$ oc delete route.route.openshift.io/lazy-dog-flask-lorem-ipsum
+route.route.openshift.io "lazy-dog-flask-lorem-ipsum" deleted
 ```
+
+## Deploying a different version
+
 ### Provenance and Integrity
 
 Helm has [provenance tools](https://helm.sh/docs/topics/provenance/) which help chart users verify the integrity and origin of a package.
