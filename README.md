@@ -71,10 +71,18 @@ version.BuildInfo{Version:"v3.5.0+6.el8", GitCommit:"77fb4bd2415712e8bfebe943389
 
 ```bash
 $ helm repo add stable https://charts.helm.sh/stable # register Artifact Hub (https://artifacthub.io/)
-$ helm repo update                                   # ensure your charts up to date
+
+$ helm repo list 
+NAME  	URL                          
+stable	https://charts.helm.sh/stable
+
+$ helm repo update  # ensure your repo is up to date
 Hang tight while we grab the latest from your chart repositories...
 ...Successfully got an update from the "stable" chart repository
 Update Complete. ⎈Happy Helming!⎈
+
+$ helm help      # general help
+$ helm repo help # repo command specific help
 ```
 
 Some useful references:
@@ -124,7 +132,9 @@ Chart (folder) structure
 
 **NOTE:** Helm YAML indentation is ``two white-space characters``! 
 
-Looking first at ``Chart.yaml`` with all the default comments removed, and mine added.
+Looking at the flask-lorem-ipsum folder.
+
+### File ``Chart.yaml`` with all the default comments removed, and mine added.
 
 ```bash
 apiVersion: v2                           # helm api version
@@ -135,7 +145,7 @@ version: 0.1.0                           # chart version (SemVer https://semver.
 appVersion: "1.16.0"                     # application version (quoted string, SemVer format optional)
 ```
 
-Looking at ``values.yaml`` which provides values to the folder templates, edited to leave only the salient parts and add my comments. 
+### File ``values.yaml`` which provides values to the folder templates, edited to leave only the salient parts and add my comments. 
 
 ```bash
 replicaCount: 1             # minimum number of pods to run the application
@@ -195,10 +205,15 @@ editing the ``Chart.yaml``, ``values.yaml``, ``templates/deployment.yaml`` and `
 
 ## Updating the helm chart for the *flask-lorem-ipsum* application
 
+As mentioned earlier ``helm create`` creates a helm chart for ``nginx``, version ``1.16.0``, and so need modification for *flask-lorem-ipsum*.
+
 ### Update Chart.yaml
 
 Summary of changes:
 * change ``appVersion: "v0.1.0"``
+
+* **Caution:** The *name* value is hard-coded throughout the template files: 
+  * Changing it requires regenerating ``helm create ...`` with the new name;
 
 ```bash
     20	# This is the version number of the application being deployed. This version number should be
@@ -209,8 +224,6 @@ Summary of changes:
 ```
 * Update the **appVersion** (*string in quotes*), the default matches an early version of nginx;
   * *appVersion* should be incremented each time application is modified;
-* **Note:** The *name* is hard-coded throughout the template files: 
-  * Changing it requires regenerating ``helm create ...`` with the new name;
 
 ### Update values.yaml
 
@@ -247,10 +260,9 @@ Summary of changes:
     21	serviceAccount:
 ```
 
-
 ### Update templates/deployment.yaml
 
-Change the deployment process for the containers to read the values from "values.yaml";
+Change the "deployment.yaml" to use the values added to the "values.yaml" above;
 
 Summary of changes:
 * if specified read ``livenessProbePath`` from *values.yaml*, or keep the default;
@@ -282,7 +294,7 @@ Summary of changes:
 
 ### Update templates/NOTES.txt
 
-The content of this file is displayed if the deployment is successful, but they reference ``kubectl`` (Kubernetes) and
+The content of this file is displayed if the deployment is successful, but defaults to displaying ``kubectl`` (Kubernetes) and
 not ``oc`` (OpenShift Container Platform) commands.
 
 Summary of changes:
@@ -321,40 +333,25 @@ $ rm templates/NOTES.txt.cln
     22	{{- end }}
 ```
 
-# Build and Test the Helm Chart
+# Test and Deploy the Helm Chart
 
-Unless you have already fetched the required images, pull them now (with *podman* or *docker*):
-
-```bash
-$ podman login docker.io
-$ podman pull docker.io/sjfke/flask-lorem-ipsum:v0.1.0
-$ podman pull docker.io/sjfke/flask-lorem-ipsum:v0.2.0
-$ podman pull docker.io/sjfke/flask-lorem-ipsum:v0.3.0
-```
-
-and then create a new OCP project.
- 
 ```bash
 $ ls -1l
 total 4
 drwxr-xr-x 4 sjfke sjfke 4096 Dec 30 10:17 flask-lorem-ipsum
 
+$ podman login docker.io # login to docker.io to access containers 
+
 $ oc whoami  # kubeadmin
+# Note cannot use developer: User "developer" cannot get resource "serviceaccounts" in API group "" in the namespace "default"
 $ oc new-project work01
 
-$ helm list
+$ helm list # should be empty (as shown)
 NAME	NAMESPACE	REVISION	UPDATED	STATUS	CHART	APP VERSION
 $ helm lint flask-lorem-ipsum
 
-$ oc whoami   # kubeadmin
-$ oc new-project sample-flask-helm
-
-$ helm list
-NAME	NAMESPACE	REVISION	UPDATED	STATUS	CHART	APP VERSION
-
-$ helm lint ocp-sample-flask-docker                          # lint the helm chart
-$ helm install --dry-run --debug lazy-dog flask-lorem-ipsum  # dry-run with debugging
-$ helm get manifest lazy-dog                                 # check the manifest, expanded install scripts
+$ helm lint flask-lorem-ipsum                                # lint the helm chart
+$ helm install --dry-run --debug lazy-dog flask-lorem-ipsum  # error-free dry-run with debugging
 
 # install using the helm-chart
 $ helm install lazy-dog flask-lorem-ipsum
@@ -386,35 +383,24 @@ lazy-dog	work01   	1       	2021-12-30 10:39:26.117738 +0100 CET	deployed	flask-
 
 $ helm get manifest lazy-dog                                 # check the manifest, expanded install scripts
 
-$ oc project  # Using project "work01" on server "https://api.crc.testing:6443".
+$ oc get pods # your pod name will be different (READY 1/1 so up and running)
+NAME                                          READY   STATUS    RESTARTS   AGE
+lazy-dog-flask-lorem-ipsum-7878dbb69c-mk88n   1/1     Running   0          14m
 
 $ oc get all
 NAME                                              READY   STATUS    RESTARTS   AGE
-pod/lazy-dog-flask-lorem-ipsum-7878dbb69c-mk88n   1/1     Running   0          7m46s
+pod/lazy-dog-flask-lorem-ipsum-57c9874fb5-clbfj   1/1     Running   0          2m16s
 
 NAME                                 TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)   AGE
-service/lazy-dog-flask-lorem-ipsum   ClusterIP   10.217.4.249   <none>        80/TCP    7m46s
+service/lazy-dog-flask-lorem-ipsum   ClusterIP   10.217.4.218   <none>        80/TCP    2m16s
 
 NAME                                         READY   UP-TO-DATE   AVAILABLE   AGE
-deployment.apps/lazy-dog-flask-lorem-ipsum   1/1     1            1           7m46s
+deployment.apps/lazy-dog-flask-lorem-ipsum   1/1     1            1           2m16s
 
 NAME                                                    DESIRED   CURRENT   READY   AGE
-replicaset.apps/lazy-dog-flask-lorem-ipsum-7878dbb69c   1         1         1       7m46s
+replicaset.apps/lazy-dog-flask-lorem-ipsum-57c9874fb5   1         1         1       2m16s
 
-$ oc get all
-NAME                                                    READY   STATUS    RESTARTS   AGE
-pod/lazy-dog-ocp-sample-flask-docker-66f5b84897-lmv7f   1/1     Running   0          4m22s
-
-NAME                                       TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)    AGE
-service/lazy-dog-ocp-sample-flask-docker   ClusterIP   10.217.5.37   <none>        8080/TCP   4m22s
-
-NAME                                               READY   UP-TO-DATE   AVAILABLE   AGE
-deployment.apps/lazy-dog-ocp-sample-flask-docker   1/1     1            1           4m22s
-
-NAME                                                          DESIRED   CURRENT   READY   AGE
-replicaset.apps/lazy-dog-ocp-sample-flask-docker-66f5b84897   1         1         1       4m22s
-
-$ oc expose service/lazy-dog-flask-lorem-ipsum
+$ oc expose service/lazy-dog-flask-lorem-ipsum # expose to make accessible (will be fixed later)
 route.route.openshift.io/lazy-dog-flask-lorem-ipsum exposed
 
 $ oc get routes
@@ -424,10 +410,7 @@ lazy-dog-flask-lorem-ipsum   lazy-dog-flask-lorem-ipsum-work01.apps-crc.testing 
 # URL: http://<service-name>-<project-name>.apps-crc.testing/ # see HOST/PORT column in 'oc get routes'
 $ firefox http://lazy-dog-flask-lorem-ipsum-work01.apps-crc.testing
 
-$ oc get pods # your pod name will be different
-NAME                                          READY   STATUS    RESTARTS   AGE
-lazy-dog-flask-lorem-ipsum-7878dbb69c-mk88n   1/1     Running   0          14m
-
+# checking and accessing the pod (note: your pod name will be different)
 $ oc get pod lazy-dog-flask-lorem-ipsum-7878dbb69c-mk88n
 $ oc logs lazy-dog-flask-lorem-ipsum-7878dbb69c-mk88n
 $ oc describe pod lazy-dog-flask-lorem-ipsum-7878dbb69c-mk88n
