@@ -83,21 +83,27 @@ Update Complete. ⎈Happy Helming!⎈
 
 $ helm help      # general help
 $ helm repo help # repo command specific help
+
+$ helm completion bash > helm_bash_completion
+$ sudo cp helm_bash_completion /etc/bash_completion.d/ # Fedora, (same other Linux distros?)
 ```
 
 Some useful references:
 
 * [Helm Quickstart Guide](https://v2.helm.sh/docs/using_helm/)
+* [Helm Completion](https://helm.sh/docs/helm/helm_completion/)
+* [Helm Completion Bash](https://helm.sh/docs/helm/helm_completion_bash/)
 * [Helm Documentation](https://v2.helm.sh/docs/)
 * [Helm Architecture](https://helm.sh/docs/topics/architecture/)
 * [Getting started with Helm 3 on OpenShift Container Platform](https://docs.openshift.com/container-platform/4.6/cli_reference/helm_cli/getting-started-with-helm-on-openshift-container-platform.html)
 * [Simple Kubernetes Helm Charts Tutorial with Examples](https://www.golinuxcloud.com/kubernetes-helm-charts/)
+* [ArtifactHUB: Example Application Helm Charts](https://artifacthub.io)
 
 ## Helm Chart Creation
 
 This approach is based on [Deploy a Go Application on Kubernetes with Helm](https://docs.bitnami.com/tutorials/deploy-go-application-kubernetes-helm/)
 
-First login to your cluster as ``kubeadmin``, then:
+First login to your cluster as ``developer`` (rather than ``kubeadmin``), then:
 
 ```bash
 $ helm create flask-lorem-ipsum
@@ -342,8 +348,7 @@ drwxr-xr-x 4 sjfke sjfke 4096 Dec 30 10:17 flask-lorem-ipsum
 
 $ podman login docker.io # login to docker.io to access containers 
 
-$ oc whoami  # kubeadmin
-# Note cannot use developer: User "developer" cannot get resource "serviceaccounts" in API group "" in the namespace "default"
+$ oc whoami  # developer
 $ oc new-project work01
 
 $ helm list # should be empty (as shown)
