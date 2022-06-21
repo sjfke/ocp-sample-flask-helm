@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "flask-lorem-ipsum.fullname" . }}-test-connection"
+  labels:
+    {{- include "flask-lorem-ipsum.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['{{ include "flask-lorem-ipsum.fullname" . }}:{{ .Values.service.port }}']
+  restartPolicy: Never

@@ -444,6 +444,135 @@ $ oc delete route.route.openshift.io/lazy-dog-flask-lorem-ipsum
 route.route.openshift.io "lazy-dog-flask-lorem-ipsum" deleted
 ```
 
+### Adding a route to expose flask-lorem-ipsum
+
+So far exposing the application outside the CRC cluster is done manually using the command:
+* ``oc expose service/lazy-dog-flask-lorem-ipsum``
+
+How can helm be made to do this?
+
+The ``oc expose service`` command is creating a `oc route` to the `lazy-dog-flask-lorem-ipsum` service, 
+which is accessible via `lazy-dog-flask-lorem-ipsum-work01.apps-crc.testing URL.
+
+From looking at the ``oc get routes -o yaml`` output it is possible to find the information required to 
+create a ``route.yaml`` file to have ``helm`` do this, that is the `metadata.name` and `spec` section.
+
+```bash
+$ oc get routes -o yaml
+apiVersion: v1
+items:
+- apiVersion: route.openshift.io/v1
+  kind: Route
+  metadata:
+    annotations:
+      openshift.io/host.generated: "true"
+    creationTimestamp: "2022-06-18T17:04:54Z"
+    labels:
+      app.kubernetes.io/instance: lazy-dog
+      app.kubernetes.io/managed-by: Helm
+      app.kubernetes.io/name: flask-lorem-ipsum
+      app.kubernetes.io/version: v0.1.0
+      helm.sh/chart: flask-lorem-ipsum-0.1.0
+    name: lazy-dog-flask-lorem-ipsum
+    namespace: work01
+    resourceVersion: "96932"
+    uid: 9f958112-1b9d-4330-adfd-adce5fb22ff7
+  spec:
+    host: lazy-dog-flask-lorem-ipsum-work01.apps-crc.testing
+    port:
+      targetPort: http
+    to:
+      kind: Service
+      name: lazy-dog-flask-lorem-ipsum
+      weight: 100
+    wildcardPolicy: None
+  status:
+    ingress:
+    - conditions:
+      - lastTransitionTime: "2022-06-18T17:04:54Z"
+        status: "True"
+        type: Admitted
+      host: lazy-dog-flask-lorem-ipsum-work01.apps-crc.testing
+      routerCanonicalHostname: router-default.apps-crc.testing
+      routerName: default
+      wildcardPolicy: None
+kind: List
+metadata:
+  resourceVersion: ""
+  selfLink: ""
+```
+The `route.yaml` is as follows, notice the `host` URL has been simplified.
+
+```bash
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "flask-lorem-ipsum.fullname" . }}
+  labels:
+    {{- include "flask-lorem-ipsum.labels" . | nindent 4 }}
+spec:
+  host: flask-lorem-ipsum.apps-crc.testing
+  port:
+    targetPort: http
+  to:
+    kind: Service
+    name: {{ include "flask-lorem-ipsum.fullname" . }}
+    weight: 100
+  wildcardPolicy: None
+```
+
+Add this file to `templates` folder, and redeploy and test.
+
+```bash
+$ ls -1l
+total 4
+drwxr-xr-x 4 sjfke sjfke 4096 Dec 30 10:17 flask-lorem-ipsum
+
+$ podman login docker.io # login to docker.io to access containers 
+
+$ oc whoami  # developer
+$ oc new-project work01
+
+$ helm list # should be empty (as shown)
+NAME	NAMESPACE	REVISION	UPDATED	STATUS	CHART	APP VERSION
+$ helm lint flask-lorem-ipsum
+
+$ helm lint flask-lorem-ipsum                                # lint the helm chart
+$ helm install --dry-run --debug lazy-dog flask-lorem-ipsum  # error-free dry-run with debugging
+
+# install using the helm-chart
+$ helm install lazy-dog flask-lorem-ipsum
+
+$ oc get routes # route added by helm with different host URL
+NAME                         HOST/PORT                            PATH   SERVICES                     PORT   TERMINATION   WILDCARD
+lazy-dog-flask-lorem-ipsum   flask-lorem-ipsum.apps-crc.testing          lazy-dog-flask-lorem-ipsum   http                 None
+$ oc get services
+NAME                         TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)   AGE
+lazy-dog-flask-lorem-ipsum   ClusterIP   10.217.4.45   <none>        80/TCP    80m
+
+$ firefox http://flask-lorem-ipsum.apps-crc.testing/
+
+# Now helm uninstall
+$ helm list
+NAME    	NAMESPACE	REVISION	UPDATED                                	STATUS  	CHART                  	APP VERSION
+lazy-dog	work01   	1       	2022-06-21 18:27:56.91539426 +0200 CEST	deployed	flask-lorem-ipsum-0.1.0	v0.1.0     
+$ helm uninstall lazy-dog
+release "lazy-dog" uninstalled
+$ helm list
+NAME	NAMESPACE	REVISION	UPDATED	STATUS	CHART	APP VERSION
+$ oc get routes # route was created by helm so is removed
+No resources found in work01 namespace.
+
+```
+While this works, moving the `route.spec` section to the `values.yaml` make things clearer and easier to maintain.
+
+### working references to go:
+
+* [sonatype-nexus/values.yaml](https://github.com/nokia/helm-charts/blob/master/stable/sonatype-nexus/values.yaml)
+* [sonatype-nexus/templates/route.yaml](https://github.com/nokia/helm-charts/blob/master/stable/sonatype-nexus/templates/route.yaml)
+* [Common: The Helm Helper Chart](https://technosophos.github.io/common-chart/)
+
+
 ## Deploying a different version
 
 ### Provenance and Integrity
