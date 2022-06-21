@@ -1,0 +1,16 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "flask-lorem-ipsum.fullname" . }}
+  labels:
+    {{- include "flask-lorem-ipsum.labels" . | nindent 4 }}
+spec:
+  host: flask-lorem-ipsum.apps-crc.testing
+  port:
+    targetPort: http
+  to:
+    kind: Service
+    name: {{ include "flask-lorem-ipsum.fullname" . }}
+    weight: 100
+  wildcardPolicy: None
+
