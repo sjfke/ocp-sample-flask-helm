@@ -342,12 +342,12 @@ $ rm templates/NOTES.txt.cln
 # Test and Deploy the Helm Chart
 
 ```bash
-$ ls -1l
+$ ls -l
 total 4
 drwxr-xr-x 4 sjfke sjfke 4096 Dec 30 10:17 flask-lorem-ipsum
 
 $ podman login docker.io # login to docker.io to access containers 
-
+$ oc login -u developer -p developer https://api.crc.testing:6443
 $ oc whoami  # developer
 $ oc new-project work01
 
@@ -452,7 +452,7 @@ So far exposing the application outside the CRC cluster is done manually using t
 How can helm be made to do this?
 
 The ``oc expose service`` command is creating a `oc route` to the `lazy-dog-flask-lorem-ipsum` service, 
-which is accessible via `lazy-dog-flask-lorem-ipsum-work01.apps-crc.testing URL.
+which is accessible via `lazy-dog-flask-lorem-ipsum-work01.apps-crc.testing` URL.
 
 From looking at the ``oc get routes -o yaml`` output it is possible to find the information required to 
 create a ``route.yaml`` file to have ``helm`` do this, that is the `metadata.name` and `spec` section.
@@ -501,7 +501,7 @@ metadata:
   resourceVersion: ""
   selfLink: ""
 ```
-The `route.yaml` is as follows, notice the `host` URL has been simplified.
+The `route.yaml` is as follows, notice the `host` URL has been simplified. 
 
 ```bash
 apiVersion: route.openshift.io/v1
@@ -520,16 +520,19 @@ spec:
     weight: 100
   wildcardPolicy: None
 ```
+Also note the `name` and `labels` are using the helm chart values used in other chart YAML files, 
+which are defined in `templates/_helpers.tpl` which is created when the chart was generated.
 
-Add this file to `templates` folder, and redeploy and test.
+Add the `route.yaml` file to `templates` folder, and redeploy and test.
 
 ```bash
-$ ls -1l
+$ ls -l
 total 4
 drwxr-xr-x 4 sjfke sjfke 4096 Dec 30 10:17 flask-lorem-ipsum
 
 $ podman login docker.io # login to docker.io to access containers 
 
+$ oc login -u developer -p developer https://api.crc.testing:6443
 $ oc whoami  # developer
 $ oc new-project work01
 
