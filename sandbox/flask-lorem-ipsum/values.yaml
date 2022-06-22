@@ -6,9 +6,11 @@ livenessProbePath: "/isalive"  # new: line added
 readinessProbePath: "/isready" # new: line added
 containerPort: 8080            # new: line added
 
-# Expose the route host (URL)
+# Expose the route host (URL) and targetPort
 route:
   host: flask-lorem-ipsum.apps-crc.testing
+  port:
+    targetPort: "http"
 
 replicaCount: 1
 

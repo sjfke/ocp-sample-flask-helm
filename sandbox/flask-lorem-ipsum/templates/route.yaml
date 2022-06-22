@@ -7,7 +7,7 @@ metadata:
 spec:
   host: {{ .Values.route.host | default "flask-lorem-ipsum.apps-crc.testing" }}
   port:
-    targetPort: http
+    targetPort: {{ .Values.route.port.targetPort | default "http" }}
   to:
     kind: Service
     name: {{ include "flask-lorem-ipsum.fullname" . }}
