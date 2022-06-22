@@ -342,12 +342,12 @@ $ rm templates/NOTES.txt.cln
 # Test and Deploy the Helm Chart
 
 ```bash
-$ ls -1l
+$ ls -l
 total 4
 drwxr-xr-x 4 sjfke sjfke 4096 Dec 30 10:17 flask-lorem-ipsum
 
 $ podman login docker.io # login to docker.io to access containers 
-
+$ oc login -u developer -p developer https://api.crc.testing:6443
 $ oc whoami  # developer
 $ oc new-project work01
 
@@ -452,7 +452,7 @@ So far exposing the application outside the CRC cluster is done manually using t
 How can helm be made to do this?
 
 The ``oc expose service`` command is creating a `oc route` to the `lazy-dog-flask-lorem-ipsum` service, 
-which is accessible via `lazy-dog-flask-lorem-ipsum-work01.apps-crc.testing URL.
+which is accessible via `lazy-dog-flask-lorem-ipsum-work01.apps-crc.testing` URL.
 
 From looking at the ``oc get routes -o yaml`` output it is possible to find the information required to 
 create a ``route.yaml`` file to have ``helm`` do this, that is the `metadata.name` and `spec` section.
@@ -501,7 +501,7 @@ metadata:
   resourceVersion: ""
   selfLink: ""
 ```
-The `route.yaml` is as follows, notice the `host` URL has been simplified.
+The `route.yaml` is as follows, notice the `host` URL has been simplified. 
 
 ```bash
 apiVersion: route.openshift.io/v1
@@ -520,16 +520,19 @@ spec:
     weight: 100
   wildcardPolicy: None
 ```
+Also note the `name` and `labels` are using the helm chart values used in other chart YAML files, 
+which are defined in `templates/_helpers.tpl` which is created when the chart was generated.
 
-Add this file to `templates` folder, and redeploy and test.
+Add the `route.yaml` file to `templates` folder, and redeploy and test.
 
 ```bash
-$ ls -1l
+$ ls -l
 total 4
 drwxr-xr-x 4 sjfke sjfke 4096 Dec 30 10:17 flask-lorem-ipsum
 
 $ podman login docker.io # login to docker.io to access containers 
 
+$ oc login -u developer -p developer https://api.crc.testing:6443
 $ oc whoami  # developer
 $ oc new-project work01
 
@@ -562,16 +565,56 @@ $ helm list
 NAME	NAMESPACE	REVISION	UPDATED	STATUS	CHART	APP VERSION
 $ oc get routes # route was created by helm so is removed
 No resources found in work01 namespace.
-
 ```
-While this works, moving the `route.spec` section to the `values.yaml` make things clearer and easier to maintain.
 
-### working references to go:
+While this works, moving the `route.host` and `route.port.targetPort` into to the `values.yaml` make things clearer and easier to maintain.
 
-* [sonatype-nexus/values.yaml](https://github.com/nokia/helm-charts/blob/master/stable/sonatype-nexus/values.yaml)
-* [sonatype-nexus/templates/route.yaml](https://github.com/nokia/helm-charts/blob/master/stable/sonatype-nexus/templates/route.yaml)
-* [Common: The Helm Helper Chart](https://technosophos.github.io/common-chart/)
+```bash
+$ cat -n templates/route.yaml 
+     1	apiVersion: route.openshift.io/v1
+     2	kind: Route
+     3	metadata:
+     4	  name: {{ include "flask-lorem-ipsum.fullname" . }}
+     5	  labels:
+     6	    {{- include "flask-lorem-ipsum.labels" . | nindent 4 }}
+     7	spec:
+     8	  host: {{ .Values.route.host | default "flask-lorem-ipsum.apps-crc.testing" }}
+     9	  port:
+    10	    targetPort: {{ .Values.route.port.targetPort | default "http" }}
+    11	  to:
+    12	    kind: Service
+    13	    name: {{ include "flask-lorem-ipsum.fullname" . }}
+    14	    weight: 100
+    15	  wildcardPolicy: None
+    16	
+```
 
+```bash
+$ cat -n values.yaml | head -15
+     1	# Default values for flask-lorem-ipsum.
+     2	# This is a YAML-formatted file.
+     3	# Declare variables to be passed into your templates.
+     4	
+     5	livenessProbePath: "/isalive"  # new: line added
+     6	readinessProbePath: "/isready" # new: line added
+     7	containerPort: 8080            # new: line added
+     8	
+     9	# Expose the route host (URL) and targetPort
+    10	route:
+    11	  host: flask-lorem-ipsum.apps-crc.testing
+    12	  port:
+    13	    targetPort: "http"
+    14	
+    15	replicaCount: 1
+```
+### Routing traffic into the cluster:
+
+There are several ways that this can be achieved and some disagreement in the industry.
+* [A Guide to using Routes, Ingress and Gateway APIs in Kubernetes without vendor lock-in](https://cloud.redhat.com/blog/a-guide-to-using-routes-ingress-and-gateway-apis-in-kubernetes-without-vendor-lock-in)
+
+Documentation on Redhat OpenShift Container Platform Route approach.
+* [RedHat Openshift route.openshift.io/v1](https://docs.openshift.com/container-platform/4.10/rest_api/network_apis/route-route-openshift-io-v1.html)
+* [RedHat Openshift Configuring Routes](https://access.redhat.com/documentation/en-us/openshift_container_platform/4.10/html/networking/configuring-routes)
 
 ## Deploying a different version
 
