@@ -5,9 +5,7 @@ metadata:
   labels:
     {{- include "flask-lorem-ipsum.labels" . | nindent 4 }}
 spec:
-  host: flask-lorem-ipsum.apps-crc.testing
-  port:
-    targetPort: http
+  host: {{ .Values.route.host | default "flask-lorem-ipsum.apps-crc.testing" }}
   to:
     kind: Service
     name: {{ include "flask-lorem-ipsum.fullname" . }}

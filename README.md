@@ -571,6 +571,7 @@ While this works, moving the `route.spec` section to the `values.yaml` make thin
 
 ### working references to go:
 
+* [A Guide to using Routes, Ingress and Gateway APIs in Kubernetes without vendor lock-in](https://cloud.redhat.com/blog/a-guide-to-using-routes-ingress-and-gateway-apis-in-kubernetes-without-vendor-lock-in)
 * [sonatype-nexus/values.yaml](https://github.com/nokia/helm-charts/blob/master/stable/sonatype-nexus/values.yaml)
 * [sonatype-nexus/templates/route.yaml](https://github.com/nokia/helm-charts/blob/master/stable/sonatype-nexus/templates/route.yaml)
 * [Common: The Helm Helper Chart](https://technosophos.github.io/common-chart/)
