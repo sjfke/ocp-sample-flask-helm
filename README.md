@@ -609,7 +609,7 @@ $ cat -n values.yaml | head -15
 ```
 ### Routing traffic into the cluster:
 
-There are several ways that this can be achieved and some disagreement in the industry.
+There are several ways that this can be achieved and some disagreement in the industry as to the best approach.
 * [A Guide to using Routes, Ingress and Gateway APIs in Kubernetes without vendor lock-in](https://cloud.redhat.com/blog/a-guide-to-using-routes-ingress-and-gateway-apis-in-kubernetes-without-vendor-lock-in)
 
 Documentation on Redhat OpenShift Container Platform Route approach.
@@ -617,6 +617,58 @@ Documentation on Redhat OpenShift Container Platform Route approach.
 * [RedHat Openshift Configuring Routes](https://access.redhat.com/documentation/en-us/openshift_container_platform/4.10/html/networking/configuring-routes)
 
 ## Deploying a different version
+
+Three updates are required:
+* update `appVersion` in `Chart.yaml`
+* update `image.tag` in `values.yaml` to select a different DockerHub image.
+* update `route.host` in `values.yaml` adding version to make the URL unique.
+
+```bash
+$ cat -n flask-lorem-ipsum/Chart.yaml | tail -n +15 | head -n 10
+    15	# This is the chart version. This version number should be incremented each time you make changes
+    16	# to the chart and its templates, including the app version.
+    17	# Versions are expected to follow Semantic Versioning (https://semver.org/)
+    18	version: 0.1.0
+    19	
+    20	# This is the version number of the application being deployed. This version number should be
+    21	# incremented each time you make changes to the application. Versions are not expected to
+    22	# follow Semantic Versioning. They should reflect the version the application is using.
+    23	# It is recommended to use it with quotes.
+    24	appVersion: "v0.2.0" # previous: "v0.1.0" was: "1.16.0"
+```
+```bash
+$ cat -n flask-lorem-ipsum/values.yaml | tail -n +5 | head -n 20
+     5	livenessProbePath: "/isalive"  # new: line added
+     6	readinessProbePath: "/isready" # new: line added
+     7	containerPort: 8080            # new: line added
+     8	
+     9	# Expose the route host (URL) and targetPort
+    10	route:
+    11	  host: flask-lorem-ipsum-v-0-2-0.apps-crc.testing # add -v-0-2-0 suffix
+    12	  port:
+    13	    targetPort: "http"
+    14	
+    15	replicaCount: 1
+    16	
+    17	image:
+    18	  repository: docker.io/sjfke/flask-lorem-ipsum # was: nginx
+    19	  pullPolicy: IfNotPresent
+    20	  # Overrides the image tag whose default is the chart appVersion.
+    21	  tag: "v0.2.0" # previous: "v.0.1.0" was: ""
+    22	
+    23	imagePullSecrets: []
+    24	nameOverride: ""
+```
+
+Deploy under a different name:
+
+```bash
+$ helm install --dry-run --debug lazy-cat flask-lorem-ipsum
+$ helm install lazy-cat flask-lorem-ipsum
+$ firefox http://flask-lorem-ipsum-v-0-2-0.apps-crc.testing/
+$ helm uninstall lazy-cat
+```
+This is probably ok for development purposes, a better, more robust version is needed for other use cases.
 
 ### Provenance and Integrity
 
