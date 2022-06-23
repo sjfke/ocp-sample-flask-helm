@@ -670,6 +670,62 @@ $ helm uninstall lazy-cat
 ```
 This is probably ok for development purposes, a better, more robust version is needed for other use cases.
 
+For development a better approach is to change `route.yaml` to include the `image.tag` version if `Values.route.host` is not set.
+
+Here an *if..then..else..end* is used in `route.yaml` and the `Values.route.host` is commented out.
+
+```bash
+$ cat -n flask-lorem-ipsum/templates/route.yaml
+     1	apiVersion: route.openshift.io/v1
+     2	kind: Route
+     3	metadata:
+     4	  name: {{ include "flask-lorem-ipsum.fullname" . }}
+     5	  labels:
+     6	    {{- include "flask-lorem-ipsum.labels" . | nindent 4 }}
+     7	spec:
+     8	  host: {{ if .Values.route.host }}
+     9	        {{ .Values.route.host | quote }}
+    10	        {{ else }}
+    11	        {{ printf "%s-%s.apps-crc.testing" "flask-lorem-ipsum" .Values.image.tag | quote }}
+    12	        {{ end }}
+    13	  port:
+    14	    targetPort: {{ .Values.route.port.targetPort | default "http" }}
+    15	  to:
+    16	    kind: Service
+    17	    name: {{ include "flask-lorem-ipsum.fullname" . }}
+    18	    weight: 100
+    19	  wildcardPolicy: None
+    20
+```
+
+```bash
+$ cat -n flask-lorem-ipsum/values.yaml | tail -n +5 | head -n 20
+     5	livenessProbePath: "/isalive"  # new: line added
+     6	readinessProbePath: "/isready" # new: line added
+     7	containerPort: 8080            # new: line added
+     8	
+     9	# Expose the route host (URL) and targetPort
+    10	route:
+    11	  # host: flask-lorem-ipsum.apps-crc.testing
+    12	  port:
+    13	    targetPort: "http"
+    14	
+    15	replicaCount: 1
+    16	
+    17	image:
+    18	  repository: docker.io/sjfke/flask-lorem-ipsum # was: nginx
+    19	  pullPolicy: IfNotPresent
+    20	  # Overrides the image tag whose default is the chart appVersion.
+    21	  tag: "v0.2.0"
+    22	
+    23	imagePullSecrets: []
+    24	nameOverride: ""
+```
+
+
+
+
+
 ### Provenance and Integrity
 
 Helm has [provenance tools](https://helm.sh/docs/topics/provenance/) which help chart users verify the integrity and origin of a package.
