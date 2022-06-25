@@ -723,15 +723,107 @@ $ cat -n flask-lorem-ipsum/values.yaml | tail -n +5 | head -n 20
 ```
 
 
+## Chart Repositories
+
+### References consulted
+* [Helm: The Chart Repository Guide](https://helm.sh/docs/topics/chart_repository/)
+* [ArtifactHUB: chartmuseum](https://artifacthub.io/packages/helm/chartmuseum/chartmuseum)
+* [GitHub: chartmuseum](https://github.com/helm/chartmuseum)
+* [ArtifactHUB: JFrog Container Registry Helm Chart](https://artifacthub.io/packages/helm/jfrog/artifactory-jcr)
+* [JFROG Artifactory: Kubernetes Helm Chart Repositories](https://www.jfrog.com/confluence/display/JFROG/Kubernetes+Helm+Chart+Repositories)
+
+### Local ChartMuseum 
+```bash
+$ oc whoami # kubeadmin
+$ oc new-project chartmuseum
+$ helm repo add chartmuseum https://chartmuseum.github.io/charts 
+$ helm repo update
+$ helm list
+NAME          	NAMESPACE  	REVISION	UPDATED                                 	STATUS  	CHART            	APP VERSION
+my-chartmuseum	chartmuseum	1       	2022-06-23 17:06:02.710156343 +0200 CEST	deployed	chartmuseum-3.8.0	0.14.0     
+$ helm install my-chartmuseum chartmuseum/chartmuseum --version 3.8.0
+```
+This fails because *anyuid* has due to CRC default protections, with an error message like:
+
+```bash
+Error creating: pods "my-chartmuseum-6f56f884d-" is forbidden: unable to validate against any security context constraint: [provider "anyuid": 
+Forbidden: not usable by user or serviceaccount, provider restricted: .spec.securityContext.fsGroup: Invalid value: []int64{1000}: 1000 is not an allowed group, provider "nonroot": 
+Forbidden: not usable by user or serviceaccount, provider "hostmount-anyuid": 
+Forbidden: not usable by user or serviceaccount, provider "machine-api-termination-handler": 
+Forbidden: not usable by user or serviceaccount, provider "hostnetwork": 
+Forbidden: not usable by user or serviceaccount, provider "hostaccess": 
+Forbidden: not usable by user or serviceaccount, provider "privileged": 
+Forbidden: not usable by user or serviceaccount]
+```
+
+A simple resolution is as follows, but **warning** This allows images to run as the root UID if no USER is specified in the Dockerfile.
+* [Enable Images to Run with USER in the Dockerfile](https://docs.openshift.com/container-platform/3.11/admin_guide/manage_scc.html)
+
+```bash
+# running the following as kubadmin, allows the install to proceed. 
+$ oc adm policy add-scc-to-group anyuid system:authenticated
+clusterrole.rbac.authorization.k8s.io/system:openshift:scc:anyuid added: "system:authenticated"
+
+# Resetting CRC defaults:
+$ oc adm policy remove-scc-from-group anyuid system:authenticated
+clusterrole.rbac.authorization.k8s.io/system:openshift:scc:anyuid removed: "system:authenticated"
+```
+By default chartmuseum uses local filesystem storage. But on pod recreation it will lose all charts, to prevent that enable persistent storage.
+* [Using with local filesystem storage](https://github.com/chartmuseum/charts/tree/main/src/chartmuseum#using-with-local-filesystem-storage)
+
+```bash
+$ cat custom.yaml
+env:
+  open:
+    STORAGE: local
+persistence:
+  enabled: true
+  accessMode: ReadWriteOnce
+  size: 8Gi
+  ## A manually managed Persistent Volume and Claim
+  ## Requires persistence.enabled: true
+  ## If defined, PVC must be created manually before volume will be bound
+  # existingClaim:
+
+  ## Chartmuseum data Persistent Volume Storage Class
+  ## If defined, storageClassName: <storageClass>
+  ## If set to "-", storageClassName: "", which disables dynamic provisioning
+  ## If undefined (the default) or set to null, no storageClassName spec is
+  ##   set, choosing the default provisioner.  (gp2 on AWS, standard on
+  ##   GKE, AWS & OpenStack)
+  ##
+  # storageClass: "-"
+  
+$ helm install --name my-chartmuseum -f custom.yaml chartmuseum/chartmuseum --version 3.8.0
+```
 
 
+### Local JFrog Artifactory
+```bash
+$ oc whoami # kubeadmin
+$ oc new-project artifactory-jcr
+$ helm repo add jfrog https://charts.jfrog.io
+$ helm repo update
+$ helm upgrade --install jfrog-container-registry --set artifactory.postgresql.postgresqlPassword=<postgres_password> --namespace artifactory-jcr jfrog/artifactory-jcr
+$ helm upgrade --install jfrog-container-registry --set artifactory.postgresql.postgresqlPassword='P0stGre$' --namespace artifactory-jcr jfrog/artifactory-jcr
+Release "jfrog-container-registry" does not exist. Installing it now.
+NAME: jfrog-container-registry
+LAST DEPLOYED: Thu Jun 23 17:33:55 2022
+NAMESPACE: artifactory-jcr
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+NOTES:
+Congratulations. You have just deployed JFrog Container Registry!
+
+```
 
 ### Provenance and Integrity
 
 Helm has [provenance tools](https://helm.sh/docs/topics/provenance/) which help chart users verify the integrity and origin of a package.
 These are based on industry-standard tools based on PKI, GnuPG, and well-respected package managers, Helm can generate and verify signature files.
 
-* [A valid PGP keypairi](https://docs.github.com/en/github/authenticating-to-github/generating-a-new-gpg-key) in a binary (not ASCII-armored) format
+* [A valid PGP keypair](https://docs.github.com/en/github/authenticating-to-github/generating-a-new-gpg-key) in a binary (not ASCII-armored) format
 * [The helm command line tool](https://helm.sh/docs/helm/helm/)
 * [GnuPG command line tools](https://www.tutorialspoint.com/unix_commands/gpg.htm)
 * [Keybase command line tools](https://book.keybase.io/guides/command-line) (optional)
