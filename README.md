@@ -727,26 +727,31 @@ $ cat -n flask-lorem-ipsum/values.yaml | tail -n +5 | head -n 20
 
 ### References consulted
 * [Helm: The Chart Repository Guide](https://helm.sh/docs/topics/chart_repository/)
-* [ArtifactHUB: chartmuseum](https://artifacthub.io/packages/helm/chartmuseum/chartmuseum)
-* [GitHub: chartmuseum](https://github.com/helm/chartmuseum)
+* [ChartMuseum Documentation](https://chartmuseum.com/docs/)
+* [ArtifactHUB: ChartMuseum](https://artifacthub.io/packages/helm/chartmuseum/chartmuseum)
+* [GitHub: ChartMuseum](https://github.com/helm/chartmuseum)
 * [ArtifactHUB: JFrog Container Registry Helm Chart](https://artifacthub.io/packages/helm/jfrog/artifactory-jcr)
 * [JFROG Artifactory: Kubernetes Helm Chart Repositories](https://www.jfrog.com/confluence/display/JFROG/Kubernetes+Helm+Chart+Repositories)
 
 ### Local ChartMuseum 
 ```bash
-$ oc whoami # kubeadmin
+$ oc whoami # developer
 $ oc new-project chartmuseum
 $ helm repo add chartmuseum https://chartmuseum.github.io/charts 
 $ helm repo update
 $ helm list
 NAME          	NAMESPACE  	REVISION	UPDATED                                 	STATUS  	CHART            	APP VERSION
 my-chartmuseum	chartmuseum	1       	2022-06-23 17:06:02.710156343 +0200 CEST	deployed	chartmuseum-3.8.0	0.14.0     
-$ helm install my-chartmuseum chartmuseum/chartmuseum --version 3.8.0
+$ helm install my-chartmuseum chartmuseum/chartmuseum --version 3.8.0 --set env.open.DISABLE_API=false
 ```
-This fails because *anyuid* has due to CRC default protections, with an error message like:
+By default, the chartmuseum helm chart installs with DISABLE_API: true parameter, so, any request to `/api` does not work, (returns 404).
+So in the helm install it is `set DISABLE_API=false` on the command line.
+
+With a default CRC configuration the installation fails, with an error message like:
 
 ```bash
-Error creating: pods "my-chartmuseum-6f56f884d-" is forbidden: unable to validate against any security context constraint: [provider "anyuid": 
+Error creating: pods "my-chartmuseum-6f56f884d-" is forbidden: 
+unable to validate against any security context constraint: [provider "anyuid": 
 Forbidden: not usable by user or serviceaccount, provider restricted: .spec.securityContext.fsGroup: Invalid value: []int64{1000}: 1000 is not an allowed group, provider "nonroot": 
 Forbidden: not usable by user or serviceaccount, provider "hostmount-anyuid": 
 Forbidden: not usable by user or serviceaccount, provider "machine-api-termination-handler": 
@@ -761,42 +766,60 @@ A simple resolution is as follows, but **warning** This allows images to run as 
 
 ```bash
 # running the following as kubadmin, allows the install to proceed. 
+$ oc login -u kubeadmin -p $PASSWORD https://api.crc.testing:6443
 $ oc adm policy add-scc-to-group anyuid system:authenticated
 clusterrole.rbac.authorization.k8s.io/system:openshift:scc:anyuid added: "system:authenticated"
+$ oc logout
 
 # Resetting CRC defaults:
+$ oc login -u kubeadmin -p $PASSWORD https://api.crc.testing:6443
 $ oc adm policy remove-scc-from-group anyuid system:authenticated
 clusterrole.rbac.authorization.k8s.io/system:openshift:scc:anyuid removed: "system:authenticated"
+$ oc logout
 ```
-By default chartmuseum uses local filesystem storage. But on pod recreation it will lose all charts, to prevent that enable persistent storage.
-* [Using with local filesystem storage](https://github.com/chartmuseum/charts/tree/main/src/chartmuseum#using-with-local-filesystem-storage)
+Once policy change is applied the helm installation will complete, but notice it does not expose the service, so
 
 ```bash
-$ cat custom.yaml
-env:
-  open:
-    STORAGE: local
-persistence:
-  enabled: true
-  accessMode: ReadWriteOnce
-  size: 8Gi
-  ## A manually managed Persistent Volume and Claim
-  ## Requires persistence.enabled: true
-  ## If defined, PVC must be created manually before volume will be bound
-  # existingClaim:
-
-  ## Chartmuseum data Persistent Volume Storage Class
-  ## If defined, storageClassName: <storageClass>
-  ## If set to "-", storageClassName: "", which disables dynamic provisioning
-  ## If undefined (the default) or set to null, no storageClassName spec is
-  ##   set, choosing the default provisioner.  (gp2 on AWS, standard on
-  ##   GKE, AWS & OpenStack)
-  ##
-  # storageClass: "-"
-  
-$ helm install --name my-chartmuseum -f custom.yaml chartmuseum/chartmuseum --version 3.8.0
+$ oc expose service/my-chartmuseum
+$ firefox http://my-chartmuseum-chartmuseum.apps-crc.testing
 ```
 
+To add the *flask-lorem-ipsum* chart to the *my-chartmuseum* repo.
+```bash
+$ helm repo add my-chartmuseum http://my-chartmuseum-chartmuseum.apps-crc.testing # add new chart repo
+$ helm package flask-lorem-ipsum/
+$ curl -X POST --data-binary "@flask-lorem-ipsum-0.1.0.tgz" http://my-chartmuseum-chartmuseum.apps-crc.testing/api/charts
+
+$ oc project work1
+$ helm repo update # get the latest index of all repos  
+$ helm install --dry-run --debug lazy-cat my-chartmuseum/flask-lorem-ipsum
+$ helm install lazy-cat my-chartmuseum/flask-lorem-ipsum
+$ helm list
+$ firefox http://flask-lorem-ipsum.apps-crc.testing/
+
+$ helm uninstall lazy-cat 
+```
+
+
+Helm has [provenance tools](https://helm.sh/docs/topics/provenance/) to help verify the integrity and origin of a package.
+These are based on industry-standard tools based on PKI, GnuPG, and well-respected package managers, Helm can generate and verify signature files.
+
+* [A valid PGP keypair](https://docs.github.com/en/github/authenticating-to-github/generating-a-new-gpg-key) in a binary (not ASCII-armored) format
+* [The helm command line tool](https://helm.sh/docs/helm/helm/)
+* [GnuPG command line tools](https://www.tutorialspoint.com/unix_commands/gpg.htm)
+* [Keybase command line tools](https://book.keybase.io/guides/command-line) (optional)
+
+##### add the steps for signing, verifying
+*** TODO ***
+
+To remove the *flask-lorem-ipsum* chart to the *my-chartmuseum* repo.
+```bash
+$ curl -X DELETE http://my-chartmuseum-chartmuseum.apps-crc.testing/api/charts/flask-lorem-ipsum/0.1.0
+```
+
+By default, chartmuseum uses filesystem storage within the pod (directory /storage), so the contents are lost 
+if the pod is recreated. To overcome chartmuseum needs persistent storage which can be or configured to use `local file storage`, `etcd` or one of the supported `cloud storage solutions` 
+(Amazon S3, MinIO, DigitalOcean, Google Cloud Storage, Microsoft Azure Blob Storage...).
 
 ### Local JFrog Artifactory
 ```bash
@@ -818,7 +841,22 @@ Congratulations. You have just deployed JFrog Container Registry!
 
 ```
 
-### Provenance and Integrity
+### Helm packing with local chart repo
+
+```bash
+$ ls -l1
+total 4
+drwxr-xr-x 4 gcollis gcollis 4096 Jun 23 15:38 flask-lorem-ipsum
+
+$ helm package flask-lorem-ipsum/
+Successfully packaged chart and saved it to: /home/gcollis/sandbox/flask-lorem-ipsum-0.1.0.tgz
+
+$ ls -l1
+total 8
+drwxr-xr-x 4 gcollis gcollis 4096 Jun 23 15:38 flask-lorem-ipsum
+-rw-rw-r-- 1 gcollis gcollis 4056 Jun 27 10:07 flask-lorem-ipsum-0.1.0.tgz
+
+
 
 Helm has [provenance tools](https://helm.sh/docs/topics/provenance/) which help chart users verify the integrity and origin of a package.
 These are based on industry-standard tools based on PKI, GnuPG, and well-respected package managers, Helm can generate and verify signature files.
