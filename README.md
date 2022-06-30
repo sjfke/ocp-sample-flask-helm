@@ -14,7 +14,7 @@ and [Quay IO](https://quay.io/repository/sjfke/flask-lorem-ipsum). Notice there 
 ``v0.1.0``, ``v0.2.0`` and ``v0.3.0`` which are identical apart from the version number and a different 
 [bootstrap 4 color theme](https://bootstrap.themes.guide/). 
 
-A ``Helm chart`` will be generated for  ``v0.1.0`` and then changed to support the other versions to demonstrate 
+A ``Helm chart`` will be generated for ``v0.1.0`` and then changed to support the other versions to demonstrate 
 [helm upgrade](https://helm.sh/docs/helm/helm_upgrade/) and [helm rollback](https://helm.sh/docs/helm/helm_rollback/)
 
 ## OpenShift Environment
@@ -97,7 +97,7 @@ Some useful references:
 * [Helm Architecture](https://helm.sh/docs/topics/architecture/)
 * [Getting started with Helm 3 on OpenShift Container Platform](https://docs.openshift.com/container-platform/4.6/cli_reference/helm_cli/getting-started-with-helm-on-openshift-container-platform.html)
 * [Simple Kubernetes Helm Charts Tutorial with Examples](https://www.golinuxcloud.com/kubernetes-helm-charts/)
-* [ArtifactHUB: Example Application Helm Charts](https://artifacthub.io)
+* [ArtifactHUB: Public Helm Charts Repository](https://artifacthub.io)
 
 ## Helm Chart Creation
 
@@ -446,10 +446,10 @@ route.route.openshift.io "lazy-dog-flask-lorem-ipsum" deleted
 
 ### Adding a route to expose flask-lorem-ipsum
 
-So far exposing the application outside the CRC cluster is done manually using the command:
+Exposing the application outside the CRC cluster has to be done manually using the command:
 * ``oc expose service/lazy-dog-flask-lorem-ipsum``
 
-How can helm be made to do this?
+How can this become part of the helm installation?
 
 The ``oc expose service`` command is creating a `oc route` to the `lazy-dog-flask-lorem-ipsum` service, 
 which is accessible via `lazy-dog-flask-lorem-ipsum-work01.apps-crc.testing` URL.
@@ -523,7 +523,7 @@ spec:
 Also note the `name` and `labels` are using the helm chart values used in other chart YAML files, 
 which are defined in `templates/_helpers.tpl` which is created when the chart was generated.
 
-Add the `route.yaml` file to `templates` folder, and redeploy and test.
+Add the `route.yaml` file to `templates` folder, redeploy and test.
 
 ```bash
 $ ls -l
@@ -538,7 +538,6 @@ $ oc new-project work01
 
 $ helm list # should be empty (as shown)
 NAME	NAMESPACE	REVISION	UPDATED	STATUS	CHART	APP VERSION
-$ helm lint flask-lorem-ipsum
 
 $ helm lint flask-lorem-ipsum                                # lint the helm chart
 $ helm install --dry-run --debug lazy-dog flask-lorem-ipsum  # error-free dry-run with debugging
@@ -567,7 +566,8 @@ $ oc get routes # route was created by helm so is removed
 No resources found in work01 namespace.
 ```
 
-While this works, moving the `route.host` and `route.port.targetPort` into to the `values.yaml` make things clearer and easier to maintain.
+While this works, moving the `route.host` and `route.port.targetPort` into to the `values.yaml` make things clearer 
+and easier to maintain, especially should you want to add HTTPS/TLS support.
 
 ```bash
 $ cat -n templates/route.yaml 
@@ -607,21 +607,27 @@ $ cat -n values.yaml | head -15
     14	
     15	replicaCount: 1
 ```
-### Routing traffic into the cluster:
 
-There are several ways that this can be achieved and some disagreement in the industry as to the best approach.
-* [A Guide to using Routes, Ingress and Gateway APIs in Kubernetes without vendor lock-in](https://cloud.redhat.com/blog/a-guide-to-using-routes-ingress-and-gateway-apis-in-kubernetes-without-vendor-lock-in)
-
-Documentation on Redhat OpenShift Container Platform Route approach.
+Redhat OpenShift Container Platform Route documentation.
 * [RedHat Openshift route.openshift.io/v1](https://docs.openshift.com/container-platform/4.10/rest_api/network_apis/route-route-openshift-io-v1.html)
 * [RedHat Openshift Configuring Routes](https://access.redhat.com/documentation/en-us/openshift_container_platform/4.10/html/networking/configuring-routes)
 
-## Deploying a different version
+### Routing traffic into the cluster, different philosophies.
+
+There are several ways to expose a service outside the cluster, and some disagreement in the industry as to the 
+best approach. The following is a good starting pint to understand your choices.
+
+* [A Guide to using Routes, Ingress and Gateway APIs in Kubernetes without vendor lock-in](https://cloud.redhat.com/blog/a-guide-to-using-routes-ingress-and-gateway-apis-in-kubernetes-without-vendor-lock-in)
+
+## Using Helm to deploy a different version
 
 Three updates are required:
 * update `appVersion` in `Chart.yaml`
 * update `image.tag` in `values.yaml` to select a different DockerHub image.
 * update `route.host` in `values.yaml` adding version to make the URL unique.
+
+The `Chart.appVersion` identifies which version the chart will install by default. 
+If `values.image.tag` is an empty string, then `Chart.appVersion` is used to determine the `image.tag` as well. 
 
 ```bash
 $ cat -n flask-lorem-ipsum/Chart.yaml | tail -n +15 | head -n 10
@@ -660,19 +666,17 @@ $ cat -n flask-lorem-ipsum/values.yaml | tail -n +5 | head -n 20
     24	nameOverride: ""
 ```
 
-Deploy under a different name:
+### Deploy the v0.2.0 version under a different name:
 
-```bash
-$ helm install --dry-run --debug lazy-cat flask-lorem-ipsum
-$ helm install lazy-cat flask-lorem-ipsum
-$ firefox http://flask-lorem-ipsum-v-0-2-0.apps-crc.testing/
-$ helm uninstall lazy-cat
-```
-This is probably ok for development purposes, a better, more robust version is needed for other use cases.
+Notice that "v0.1.0" and "v0.2.0" have the same URL, so it will deploy but only one of the services is accessible 
+via the URL.
 
-For development a better approach is to change `route.yaml` to include the `image.tag` version if `Values.route.host` is not set.
+A better approach is to change `route.yaml` to include the `image.tag` version in the URL if `Values.route.host` 
+is not set, by using an *if..then..else..end* statement in the `route.yaml` and the result is forced to be a string by 
+using `| quote` syntax.
 
-Here an *if..then..else..end* is used in `route.yaml` and the `Values.route.host` is commented out.
+In this example the `Values.route.host` is commented out, so the `route.yaml` *else* clause is determining the value 
+of `host` .
 
 ```bash
 $ cat -n flask-lorem-ipsum/templates/route.yaml
@@ -722,6 +726,12 @@ $ cat -n flask-lorem-ipsum/values.yaml | tail -n +5 | head -n 20
     24	nameOverride: ""
 ```
 
+```bash
+$ helm install --dry-run --debug lazy-cat flask-lorem-ipsum
+$ helm install lazy-cat flask-lorem-ipsum
+$ firefox http://flask-lorem-ipsum-v-0-2-0.apps-crc.testing/
+$ helm uninstall lazy-cat
+```
 
 ## Chart Repositories
 
