@@ -449,8 +449,6 @@ route.route.openshift.io "lazy-dog-flask-lorem-ipsum" deleted
 Exposing the application outside the CRC cluster has to be done manually using the command:
 * ``oc expose service/lazy-dog-flask-lorem-ipsum``
 
-How can this become part of the helm installation?
-
 The ``oc expose service`` command is creating a `oc route` to the `lazy-dog-flask-lorem-ipsum` service, 
 which is accessible via `lazy-dog-flask-lorem-ipsum-work01.apps-crc.testing` URL.
 
@@ -737,13 +735,101 @@ $ helm uninstall lazy-cat
 
 ### References consulted
 * [Helm: The Chart Repository Guide](https://helm.sh/docs/topics/chart_repository/)
-* [ChartMuseum Documentation](https://chartmuseum.com/docs/)
-* [ArtifactHUB: ChartMuseum](https://artifacthub.io/packages/helm/chartmuseum/chartmuseum)
-* [GitHub: ChartMuseum](https://github.com/helm/chartmuseum)
-* [ArtifactHUB: JFrog Container Registry Helm Chart](https://artifacthub.io/packages/helm/jfrog/artifactory-jcr)
-* [JFROG Artifactory: Kubernetes Helm Chart Repositories](https://www.jfrog.com/confluence/display/JFROG/Kubernetes+Helm+Chart+Repositories)
+* [ChartMuseum - Documentation](https://chartmuseum.com/docs/)
+* [ChartMuseum - ArtifactHUB](https://artifacthub.io/packages/helm/chartmuseum/chartmuseum)
+* [ChartMuseum - GitHub](https://github.com/helm/chartmuseum)
+* [JFrog Container Registry Helm Chart - ArtifactHUB](https://artifacthub.io/packages/helm/jfrog/artifactory-jcr)
+* [Kubernetes Helm Chart Repositories - JFROG Artifactory](https://www.jfrog.com/confluence/display/JFROG/Kubernetes+Helm+Chart+Repositories)
 
-### Local ChartMuseum 
+### Helm packing with local chart repo
+
+```bash
+$ ls -l
+total 4
+drwxr-xr-x 4 sjfke sjfke 4096 Jun 23 15:38 flask-lorem-ipsum
+
+$ helm package flask-lorem-ipsum/
+Successfully packaged chart and saved it to: /home/sjfke/sandbox/flask-lorem-ipsum-0.1.0.tgz
+
+$ ls -l
+total 8
+drwxr-xr-x 4 sjfke sjfke 4096 Jun 23 15:38 flask-lorem-ipsum
+-rw-rw-r-- 1 sjfke sjfke 4056 Jun 27 10:07 flask-lorem-ipsum-0.1.0.tgz
+
+To add the *flask-lorem-ipsum* chart to the *my-chartmuseum* repo.
+```bash
+$ helm repo add my-chartmuseum http://my-chartmuseum-chartmuseum.apps-crc.testing # add new chart repo
+$ curl -X POST --data-binary "@flask-lorem-ipsum-0.1.0.tgz" http://my-chartmuseum-chartmuseum.apps-crc.testing/api/charts
+$ helm search repo my-chartmuseum
+NAME                            	CHART VERSION	APP VERSION	DESCRIPTION                
+my-chartmuseum/flask-lorem-ipsum	0.1.0        	v0.1.0     	A Helm chart for Kubernetes
+```
+
+Your chart can be signed and verified using a GPG key, see [GPG keys setup](#gpg-keys-setup), as described in
+[Helm Provenance and Integrity - The Workflow](https://helm.sh/docs/topics/provenance/#the-workflow)
+
+```bash
+$ gpg1 --list-keys | grep uid
+uid                  sjfke (Helm) <gcollis@ymail.com>
+
+$ helm package --debug --sign --key sjfke --keyring ~/.gnupg/secring.gpg flask-lorem-ipsum
+Password for key "sjfke (Helm) <gcollis@ymail.com>" >  
+Successfully packaged chart and saved it to: /home/gcollis/work06/ocp-sample-flask-helm/sandbox/flask-lorem-ipsum-0.1.0.tgz
+
+# alternative using the complete 'uid'
+$ helm package --debug --sign --key 'sjfke (Helm) <gcollis@ymail.com>' --keyring ~/.gnupg/secring.gpg flask-lorem-ipsum
+Password for key "sjfke (Helm) <gcollis@ymail.com>" >  
+Successfully packaged chart and saved it to: /home/gcollis/work06/ocp-sample-flask-helm/sandbox/flask-lorem-ipsum-0.1.0.tgz
+
+$ ls -l
+total 12
+drwxr-xr-x 4 sjfke sjfke 4096 Jun 30 21:21 flask-lorem-ipsum
+-rw-rw-r-- 1 sjfke sjfke 4056 Jul  1 16:29 flask-lorem-ipsum-0.1.0.tgz
+-rw-r--r-- 1 sjfke sjfke  925 Jul  1 16:29 flask-lorem-ipsum-0.1.0.tgz.prov
+
+$ $ helm verify flask-lorem-ipsum-0.1.0.tgz
+Signed by: sjfke (Helm) <gcollis@ymail.com>
+Using Key With Fingerprint: F50B1542D6DD4EB3946995715042BA8D7FA9B776
+Chart Hash Verified: sha256:fc6ec3d09a5133fd32a8be6d3f7e5cc7f300c18b5e7d99466fbc37d576da1365
+
+# Delete the chart from my-chartmuseum
+$ curl -X DELETE http://my-chartmuseum-chartmuseum.apps-crc.testing/api/charts/flask-lorem-ipsum/0.1.0
+{"deleted":true}
+
+# Upload the chart and the providence file.
+$ curl -F "chart=@flask-lorem-ipsum-0.1.0.tgz" -F "prov=@flask-lorem-ipsum-0.1.0.tgz.prov" http:///my-chartmuseum-chartmuseum.apps-crc.testing/api/charts
+{"saved":true}
+
+$ oc project work01
+$ helm list
+NAME        	NAMESPACE	REVISION	UPDATED                                 	STATUS  	CHART                  	APP VERSION
+lazy-cat    	work01   	1       	2022-06-27 16:21:01.566456556 +0200 CEST	deployed	flask-lorem-ipsum-0.1.0	v0.1.0     
+
+$ helm uninstall lazy-cat # to avoid URL name clash 
+release "lazy-cat" uninstalled
+
+$ helm install --verify lazy-cat my-chartmuseum/flask-lorem-ipsum
+NAME: lazy-cat
+LAST DEPLOYED: Fri Jul  1 16:58:25 2022
+NAMESPACE: work01
+STATUS: deployed
+REVISION: 1
+NOTES:
+1. Get the application URL by running these commands:
+  export POD_NAME=$(oc get pods --namespace work01 -l "app.kubernetes.io/name=flask-lorem-ipsum,app.kubernetes.io/instance=lazy-cat" -o jsonpath="{.items[0].metadata.name}")
+  export CONTAINER_PORT=$(oc get pod --namespace work01 $POD_NAME -o jsonpath="{.spec.containers[0].ports[0].containerPort}")
+  echo "Visit http://127.0.0.1:8080 to use your application"
+  oc --namespace work01 port-forward $POD_NAME 8080:$CONTAINER_PORT
+
+$ helm list
+NAME    	NAMESPACE	REVISION	UPDATED                                 	STATUS  	CHART                  	APP VERSION
+lazy-cat	work01   	1       	2022-07-01 16:58:25.429944381 +0200 CEST	deployed	flask-lorem-ipsum-0.1.0	v0.1.0     
+
+$ firefox http://flask-lorem-ipsum.apps-crc.testing/
+```
+
+### Installing Local ChartMuseum from its Helm Chart
+
 ```bash
 $ oc whoami # developer
 $ oc new-project chartmuseum
@@ -810,6 +896,17 @@ $ firefox http://flask-lorem-ipsum.apps-crc.testing/
 $ helm uninstall lazy-cat 
 ```
 
+To remove the *flask-lorem-ipsum* chart to the *my-chartmuseum* repo.
+```bash
+$ curl -X DELETE http://my-chartmuseum-chartmuseum.apps-crc.testing/api/charts/flask-lorem-ipsum/0.1.0
+```
+
+By default, chartmuseum uses filesystem storage within the pod (directory /storage), so the contents are lost 
+if the pod is recreated. To overcome chartmuseum needs persistent storage which can be or configured to use `local file storage`, `etcd` or one of the supported `cloud storage solutions` 
+(Amazon S3, MinIO, DigitalOcean, Google Cloud Storage, Microsoft Azure Blob Storage...).
+
+##### add the steps for signing, verifying
+*** TODO ***
 
 Helm has [provenance tools](https://helm.sh/docs/topics/provenance/) to help verify the integrity and origin of a package.
 These are based on industry-standard tools based on PKI, GnuPG, and well-respected package managers, Helm can generate and verify signature files.
@@ -819,17 +916,7 @@ These are based on industry-standard tools based on PKI, GnuPG, and well-respect
 * [GnuPG command line tools](https://www.tutorialspoint.com/unix_commands/gpg.htm)
 * [Keybase command line tools](https://book.keybase.io/guides/command-line) (optional)
 
-##### add the steps for signing, verifying
-*** TODO ***
 
-To remove the *flask-lorem-ipsum* chart to the *my-chartmuseum* repo.
-```bash
-$ curl -X DELETE http://my-chartmuseum-chartmuseum.apps-crc.testing/api/charts/flask-lorem-ipsum/0.1.0
-```
-
-By default, chartmuseum uses filesystem storage within the pod (directory /storage), so the contents are lost 
-if the pod is recreated. To overcome chartmuseum needs persistent storage which can be or configured to use `local file storage`, `etcd` or one of the supported `cloud storage solutions` 
-(Amazon S3, MinIO, DigitalOcean, Google Cloud Storage, Microsoft Azure Blob Storage...).
 
 ### Local JFrog Artifactory
 ```bash
@@ -851,40 +938,44 @@ Congratulations. You have just deployed JFrog Container Registry!
 
 ```
 
-### Helm packing with local chart repo
 
-```bash
-$ ls -l1
-total 4
-drwxr-xr-x 4 gcollis gcollis 4096 Jun 23 15:38 flask-lorem-ipsum
-
-$ helm package flask-lorem-ipsum/
-Successfully packaged chart and saved it to: /home/gcollis/sandbox/flask-lorem-ipsum-0.1.0.tgz
-
-$ ls -l1
-total 8
-drwxr-xr-x 4 gcollis gcollis 4096 Jun 23 15:38 flask-lorem-ipsum
--rw-rw-r-- 1 gcollis gcollis 4056 Jun 27 10:07 flask-lorem-ipsum-0.1.0.tgz
-
-
-
-Helm has [provenance tools](https://helm.sh/docs/topics/provenance/) which help chart users verify the integrity and origin of a package.
-These are based on industry-standard tools based on PKI, GnuPG, and well-respected package managers, Helm can generate and verify signature files.
+#### GPG keys setup
 
 * [A valid PGP keypair](https://docs.github.com/en/github/authenticating-to-github/generating-a-new-gpg-key) in a binary (not ASCII-armored) format
-* [The helm command line tool](https://helm.sh/docs/helm/helm/)
 * [GnuPG command line tools](https://www.tutorialspoint.com/unix_commands/gpg.htm)
 * [Keybase command line tools](https://book.keybase.io/guides/command-line) (optional)
 
-#### Generate the GPG keys
+Helm requires *gpg GnuPG version 1*, see 
+[Helm Provenance and Integrity - The Workflow](https://helm.sh/docs/topics/provenance/#the-workflow).
+
+The gpg (GnuPG) 1.4.x version, is still available for many platforms, so the older version is installed for checking 
+the keys.
 
 ```bash
+$ gpg --version
+gpg (GnuPG) 2.3.4
+libgcrypt 1.9.4-unknown
+Copyright (C) 2021 Free Software Foundation, Inc.
+License GNU GPL-3.0-or-later <https://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+....
+
+$ sudo dnf install gnupg1.x86_64 # install older version
+$ gpg1 --version
+gpg (GnuPG) 1.4.23
+Copyright (C) 2015 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+....
+
 $ gpg --list-secret-keys  # creates everything if the first time
 gpg: directory '/home/gcollis/.gnupg' created
 gpg: keybox '/home/gcollis/.gnupg/pubring.kbx' created
 gpg: /home/gcollis/.gnupg/trustdb.gpg: trustdb created
 
-gcollis@morpheus work07]$ gpg --full-generate-key
+$ gpg --full-generate-key
 gpg (GnuPG) 2.2.25; Copyright (C) 2020 Free Software Foundation, Inc.
 This is free software: you are free to change and redistribute it.
 There is NO WARRANTY, to the extent permitted by law.
@@ -893,40 +984,51 @@ Please select what kind of key you want:
    (1) RSA and RSA (default)
 ....
 
-$ tree /home/gcollis/.gnupg/
-/home/gcollis/.gnupg/
+# if this fails try the following, and repeat the full-generate-key
+$ gpgconf --kill gpg-agent # fix gpg: agent_genkey failed: No such file or directory
+
+$ tree ~/.gnupg/
+/home/sjfke/.gnupg/
 ├── openpgp-revocs.d
-│   └── 2722B192EAAF3412D30CDC4810DBA57F355F960F.rev
+│   └── 4836FDB95D33CEDF32EB3C757F3DE8A545C0A597.rev
 ├── private-keys-v1.d
-│   ├── 8FC27FEFEF03DB8F7346EA6E52752D0B390E134C.key
-│   └── A4E2C18B175DB835C43535F6362EBC7F03709B33.key
+│   ├── 19077755F3C27DC2F7EB6237BEA062265BAABBBC.key
+│   └── A8F32B53734AD7C52A8852C53B8D9447BBE1E546.key
 ├── pubring.kbx
 ├── pubring.kbx~
 └── trustdb.gpg
 
-$ gpg --version
-gpg (GnuPG) 2.2.25
-libgcrypt 1.8.7
-Copyright (C) 2020 Free Software Foundation, Inc.
-....
+# From: https://helm.sh/docs/topics/provenance/#the-workflow
+# If *GnuPG version 2*, it uses .kbx for key-rings, helm needs the old *GnuPG version 1* format 
+$ gpg --export >~/.gnupg/pubring.gpg             # NOTE: no space after the '>'
+$ gpg --export-secret-keys >~/.gnupg/secring.gpg # NOTE: no space after the '>'
 
-# If GnuPG version 2, it uses .kbx for key-rings, helm needs old .gpg format 
-$ gpg --export >~/.gnupg/pubring.gpg
-$ gpg --export-secret-keys >~/.gnupg/secring.gpg
-
-$ tree ~/.gnupg/
-/home/gcollis/.gnupg/
+$ tree ~/.gnupg/ # notice pubring.gpg and secring.gpg are added.
+/home/sjfke/.gnupg/
 ├── openpgp-revocs.d
-│   └── 2722B192EAAF3412D30CDC4810DBA57F355F960F.rev
+│   └── 4836FDB95D33CEDF32EB3C757F3DE8A545C0A597.rev
 ├── private-keys-v1.d
-│   ├── 8FC27FEFEF03DB8F7346EA6E52752D0B390E134C.key
-│   └── A4E2C18B175DB835C43535F6362EBC7F03709B33.key
+│   ├── 19077755F3C27DC2F7EB6237BEA062265BAABBBC.key
+│   └── A8F32B53734AD7C52A8852C53B8D9447BBE1E546.key
 ├── pubring.gpg
 ├── pubring.kbx
 ├── pubring.kbx~
 ├── secring.gpg
 └── trustdb.gpg
+
+# Now check the keys
+$ gpg --list-keys         # GnuPG (gpg) V2
+$ gpg --list-secret-keys  # GnuPG (gpg) V2
+$ gpg1 --list-keys        # GnuPG (gpg) V1
+$ gpg1 --list-secret-keys # GnuPG (gpg) V1
+
+# Helm requires the gpg1 uid, which is the found from either command
+$ gpg1 --list-keys | grep uid
+uid                  sjfke (Helm) <gcollis@ymail.com>
+$ gpg1 --list-secret-keys | grep uid
+uid                  sjfke (Helm) <gcollis@ymail.com>
 ```
+##### DELETE ME
 
 With GPG key-pair generated, now sign/validate the helm chart.
 
