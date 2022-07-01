@@ -957,7 +957,8 @@ $ oc adm policy remove-scc-from-group anyuid system:authenticated
 clusterrole.rbac.authorization.k8s.io/system:openshift:scc:anyuid removed: "system:authenticated"
 $ oc logout
 ```
-Once policy change is applied the helm installation will complete, but notice it does not expose the service, so
+Once policy change is applied the helm installation will complete, but notice it does not expose the service, so this
+needs to be done manually.
 
 ```bash
 $ oc expose service/my-chartmuseum
