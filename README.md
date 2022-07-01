@@ -743,6 +743,8 @@ $ helm uninstall lazy-cat
 
 ### Helm packing with local chart repo
 
+This uses ChartMuseuem as the local repo, see [Installing Local ChartMuseum from its Helm Chart](#installing-local-chartmuseum-from-its-helm-chart)
+
 ```bash
 $ ls -l
 total 4
@@ -800,12 +802,14 @@ $ curl -X DELETE http://my-chartmuseum-chartmuseum.apps-crc.testing/api/charts/f
 $ curl -F "chart=@flask-lorem-ipsum-0.1.0.tgz" -F "prov=@flask-lorem-ipsum-0.1.0.tgz.prov" http:///my-chartmuseum-chartmuseum.apps-crc.testing/api/charts
 {"saved":true}
 
+$ oc login -u developer -p developer https://api.crc.testing:6443
+$ oc whoami # developer
 $ oc project work01
 $ helm list
 NAME        	NAMESPACE	REVISION	UPDATED                                 	STATUS  	CHART                  	APP VERSION
 lazy-cat    	work01   	1       	2022-06-27 16:21:01.566456556 +0200 CEST	deployed	flask-lorem-ipsum-0.1.0	v0.1.0     
 
-$ helm uninstall lazy-cat # to avoid URL name clash 
+$ helm uninstall lazy-cat # to avoid URL name clash (** TODO: fix the docker repo versions **)
 release "lazy-cat" uninstalled
 
 $ helm install --verify lazy-cat my-chartmuseum/flask-lorem-ipsum
@@ -828,9 +832,89 @@ lazy-cat	work01   	1       	2022-07-01 16:58:25.429944381 +0200 CEST	deployed	fl
 $ firefox http://flask-lorem-ipsum.apps-crc.testing/
 ```
 
+#### GPG keys setup
+
+* [A valid PGP keypair](https://docs.github.com/en/github/authenticating-to-github/generating-a-new-gpg-key) in a binary (not ASCII-armored) format
+* [GnuPG command line tools](https://www.tutorialspoint.com/unix_commands/gpg.htm)
+* [Keybase command line tools](https://book.keybase.io/guides/command-line) (optional)
+
+Helm requires *gpg GnuPG version 1*, see 
+[Helm Provenance and Integrity - The Workflow](https://helm.sh/docs/topics/provenance/#the-workflow).
+
+The gpg (GnuPG) 1.4.x version, is still available for many platforms, so the older version is installed for checking 
+the keys.
+
+```bash
+$ gpg --version
+gpg (GnuPG) 2.3.4
+libgcrypt 1.9.4-unknown
+Copyright (C) 2021 Free Software Foundation, Inc.
+License GNU GPL-3.0-or-later <https://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+....
+
+$ sudo dnf install gnupg1.x86_64 # install older version
+$ gpg1 --version
+gpg (GnuPG) 1.4.23
+Copyright (C) 2015 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+....
+
+$ gpg --list-secret-keys  # creates everything if the first time
+gpg: directory '/home/gcollis/.gnupg' created
+gpg: keybox '/home/gcollis/.gnupg/pubring.kbx' created
+gpg: /home/gcollis/.gnupg/trustdb.gpg: trustdb created
+
+$ gpg --full-generate-key
+gpg (GnuPG) 2.2.25; Copyright (C) 2020 Free Software Foundation, Inc.
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+
+Please select what kind of key you want:
+   (1) RSA and RSA (default)
+....
+# If this fails with: agent_genkey failed: No such file or directory
+# Try the following, and repeat the full-generate-key
+$ gpgconf --kill gpg-agent # fix gpg: agent_genkey failed: No such file or directory
+
+# From: https://helm.sh/docs/topics/provenance/#the-workflow
+# If *GnuPG version 2*, it uses .kbx for key-rings, helm needs the old *GnuPG version 1* format 
+$ gpg --export >~/.gnupg/pubring.gpg             # NOTE: no space after the '>'
+$ gpg --export-secret-keys >~/.gnupg/secring.gpg # NOTE: no space after the '>'
+
+$ tree ~/.gnupg/ # notice pubring.gpg and secring.gpg are added.
+/home/sjfke/.gnupg/
+├── openpgp-revocs.d
+│   └── 4836FDB95D33CEDF32EB3C757F3DE8A545C0A597.rev
+├── private-keys-v1.d
+│   ├── 19077755F3C27DC2F7EB6237BEA062265BAABBBC.key
+│   └── A8F32B53734AD7C52A8852C53B8D9447BBE1E546.key
+├── pubring.gpg
+├── pubring.kbx
+├── pubring.kbx~
+├── secring.gpg
+└── trustdb.gpg
+
+# Now check the keys
+$ gpg --list-keys         # GnuPG (gpg) V2
+$ gpg --list-secret-keys  # GnuPG (gpg) V2
+$ gpg1 --list-keys        # GnuPG (gpg) V1
+$ gpg1 --list-secret-keys # GnuPG (gpg) V1
+
+# Helm requires the gpg1 uid, which is the found from either command
+$ gpg1 --list-keys | grep uid
+uid                  sjfke (Helm) <gcollis@ymail.com>
+$ gpg1 --list-secret-keys | grep uid
+uid                  sjfke (Helm) <gcollis@ymail.com>
+```
+
 ### Installing Local ChartMuseum from its Helm Chart
 
 ```bash
+$ oc login -u developer -p developer https://api.crc.testing:6443
 $ oc whoami # developer
 $ oc new-project chartmuseum
 $ helm repo add chartmuseum https://chartmuseum.github.io/charts 
@@ -905,20 +989,10 @@ By default, chartmuseum uses filesystem storage within the pod (directory /stora
 if the pod is recreated. To overcome chartmuseum needs persistent storage which can be or configured to use `local file storage`, `etcd` or one of the supported `cloud storage solutions` 
 (Amazon S3, MinIO, DigitalOcean, Google Cloud Storage, Microsoft Azure Blob Storage...).
 
-##### add the steps for signing, verifying
-*** TODO ***
+### Installing Local JFrog Artifactory from its Helm Chart
 
-Helm has [provenance tools](https://helm.sh/docs/topics/provenance/) to help verify the integrity and origin of a package.
-These are based on industry-standard tools based on PKI, GnuPG, and well-respected package managers, Helm can generate and verify signature files.
+*** TODO - fix the physical volume claims issue ***
 
-* [A valid PGP keypair](https://docs.github.com/en/github/authenticating-to-github/generating-a-new-gpg-key) in a binary (not ASCII-armored) format
-* [The helm command line tool](https://helm.sh/docs/helm/helm/)
-* [GnuPG command line tools](https://www.tutorialspoint.com/unix_commands/gpg.htm)
-* [Keybase command line tools](https://book.keybase.io/guides/command-line) (optional)
-
-
-
-### Local JFrog Artifactory
 ```bash
 $ oc whoami # kubeadmin
 $ oc new-project artifactory-jcr
@@ -935,180 +1009,4 @@ REVISION: 1
 TEST SUITE: None
 NOTES:
 Congratulations. You have just deployed JFrog Container Registry!
-
 ```
-
-
-#### GPG keys setup
-
-* [A valid PGP keypair](https://docs.github.com/en/github/authenticating-to-github/generating-a-new-gpg-key) in a binary (not ASCII-armored) format
-* [GnuPG command line tools](https://www.tutorialspoint.com/unix_commands/gpg.htm)
-* [Keybase command line tools](https://book.keybase.io/guides/command-line) (optional)
-
-Helm requires *gpg GnuPG version 1*, see 
-[Helm Provenance and Integrity - The Workflow](https://helm.sh/docs/topics/provenance/#the-workflow).
-
-The gpg (GnuPG) 1.4.x version, is still available for many platforms, so the older version is installed for checking 
-the keys.
-
-```bash
-$ gpg --version
-gpg (GnuPG) 2.3.4
-libgcrypt 1.9.4-unknown
-Copyright (C) 2021 Free Software Foundation, Inc.
-License GNU GPL-3.0-or-later <https://gnu.org/licenses/gpl.html>
-This is free software: you are free to change and redistribute it.
-There is NO WARRANTY, to the extent permitted by law.
-....
-
-$ sudo dnf install gnupg1.x86_64 # install older version
-$ gpg1 --version
-gpg (GnuPG) 1.4.23
-Copyright (C) 2015 Free Software Foundation, Inc.
-License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
-This is free software: you are free to change and redistribute it.
-There is NO WARRANTY, to the extent permitted by law.
-....
-
-$ gpg --list-secret-keys  # creates everything if the first time
-gpg: directory '/home/gcollis/.gnupg' created
-gpg: keybox '/home/gcollis/.gnupg/pubring.kbx' created
-gpg: /home/gcollis/.gnupg/trustdb.gpg: trustdb created
-
-$ gpg --full-generate-key
-gpg (GnuPG) 2.2.25; Copyright (C) 2020 Free Software Foundation, Inc.
-This is free software: you are free to change and redistribute it.
-There is NO WARRANTY, to the extent permitted by law.
-
-Please select what kind of key you want:
-   (1) RSA and RSA (default)
-....
-
-# if this fails try the following, and repeat the full-generate-key
-$ gpgconf --kill gpg-agent # fix gpg: agent_genkey failed: No such file or directory
-
-$ tree ~/.gnupg/
-/home/sjfke/.gnupg/
-├── openpgp-revocs.d
-│   └── 4836FDB95D33CEDF32EB3C757F3DE8A545C0A597.rev
-├── private-keys-v1.d
-│   ├── 19077755F3C27DC2F7EB6237BEA062265BAABBBC.key
-│   └── A8F32B53734AD7C52A8852C53B8D9447BBE1E546.key
-├── pubring.kbx
-├── pubring.kbx~
-└── trustdb.gpg
-
-# From: https://helm.sh/docs/topics/provenance/#the-workflow
-# If *GnuPG version 2*, it uses .kbx for key-rings, helm needs the old *GnuPG version 1* format 
-$ gpg --export >~/.gnupg/pubring.gpg             # NOTE: no space after the '>'
-$ gpg --export-secret-keys >~/.gnupg/secring.gpg # NOTE: no space after the '>'
-
-$ tree ~/.gnupg/ # notice pubring.gpg and secring.gpg are added.
-/home/sjfke/.gnupg/
-├── openpgp-revocs.d
-│   └── 4836FDB95D33CEDF32EB3C757F3DE8A545C0A597.rev
-├── private-keys-v1.d
-│   ├── 19077755F3C27DC2F7EB6237BEA062265BAABBBC.key
-│   └── A8F32B53734AD7C52A8852C53B8D9447BBE1E546.key
-├── pubring.gpg
-├── pubring.kbx
-├── pubring.kbx~
-├── secring.gpg
-└── trustdb.gpg
-
-# Now check the keys
-$ gpg --list-keys         # GnuPG (gpg) V2
-$ gpg --list-secret-keys  # GnuPG (gpg) V2
-$ gpg1 --list-keys        # GnuPG (gpg) V1
-$ gpg1 --list-secret-keys # GnuPG (gpg) V1
-
-# Helm requires the gpg1 uid, which is the found from either command
-$ gpg1 --list-keys | grep uid
-uid                  sjfke (Helm) <gcollis@ymail.com>
-$ gpg1 --list-secret-keys | grep uid
-uid                  sjfke (Helm) <gcollis@ymail.com>
-```
-##### DELETE ME
-
-With GPG key-pair generated, now sign/validate the helm chart.
-
-```bash
-$ helm package --sign --key 'Sjfke' --keyring ~/.gnupg/secring.gpg ocp-sample-flask-docker/
-Password for key "Sjfke <gcollis@ymail.com>" >  
-Successfully packaged chart and saved it to: /home/gcollis/work08/ocp-sample-flask-docker-0.1.0.tgz
-
-$ ls -1 *tgz*
-ocp-sample-flask-docker-0.1.0.tgz
-ocp-sample-flask-docker-0.1.0.tgz.prov
-
-$ helm verify ocp-sample-flask-docker-0.1.0.tgz
-Signed by: Sjfke <gcollis@ymail.com>
-Using Key With Fingerprint: 2722B192EAAF3412D30CDC4810DBA57F355F960F
-Chart Hash Verified: sha256:fb430dadf740baeb0d83c9ad0e5fc65d8cb0843568e556651cc3212174b8e4a7
-```
-Installing the signed/verified helm chart.
-
-```bash
-$ helm install lazy-dog --verify ocp-sample-flask-docker-0.1.0.tgz
-NAME: lazy-dog
-LAST DEPLOYED: Mon May 24 18:24:25 2021
-NAMESPACE: sample-flask-helm
-STATUS: deployed
-REVISION: 1
-NOTES:
-1. Get the application URL by running these commands:
-  export POD_NAME=$(oc get pods --namespace sample-flask-helm -l "app.kubernetes.io/name=ocp-sample-flask-docker,app.kubernetes.io/instance=lazy-dog" -o jsonpath="{.items[0].metadata.name}")
-  export CONTAINER_PORT=$(oc get pod --namespace sample-flask-helm $POD_NAME -o jsonpath="{.spec.containers[0].ports[0].containerPort}")
-  echo "Visit http://127.0.0.1:8080 to use your application"
-  oc --namespace sample-flask-helm port-forward $POD_NAME 8080:$CONTAINER_PORT
-[gcollis@morpheus work08]$ oc get all
-NAME                                                    READY   STATUS              RESTARTS   AGE
-pod/lazy-dog-ocp-sample-flask-docker-564965c65c-pgr8k   0/1     ContainerCreating   0          6s
-
-NAME                                       TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)    AGE
-service/lazy-dog-ocp-sample-flask-docker   ClusterIP   10.217.5.48   <none>        8080/TCP   7s
-
-NAME                                               READY   UP-TO-DATE   AVAILABLE   AGE
-deployment.apps/lazy-dog-ocp-sample-flask-docker   0/1     1            0           7s
-
-NAME                                                          DESIRED   CURRENT   READY   AGE
-replicaset.apps/lazy-dog-ocp-sample-flask-docker-564965c65c   1         1         0       7s
-
-# URL: http://<service-name>-<project-name>.apps-crc.testing/
-$ firefox http://lazy-dog-ocp-sample-flask-docker-sample-flask-helm.apps-crc.testing/
-
-# uninstall
-$ helm uninstall lazy-dog  # release "lazy-dog" uninstalled
-```
-************************************************
-*********** 30.05.2021 *************************
-************************************************
-
-## Creating a Helm Chart Repo
-
-There are many ways to do this, a helm chart repository is simply a web-server with a given structure.
-
-The approach described uses [GitHub Pages](https://helm.sh/docs/topics/chart_repository/#github-pages-example), but many others are possible such as, [Google Cloud Storage](https://helm.sh/docs/topics/chart_repository/#google-cloud-storage), [JFrog Artifactory](https://helm.sh/docs/topics/chart_repository/#jfrog-artifactory).
-
-* [Helm: Chart Repository Guide](https://helm.sh/docs/topics/chart_repository/)
-* [Automate Helm chart repository publishing with GitHub Actions and Pages](https://medium.com/@stefanprodan/automate-helm-chart-repository-publishing-with-github-actions-and-pages-8a374ce24cf4)
-
-First create a new GitHub project to host your helm repos, [sjfke/helm-repos](https://github.com/sjfke/helm-repos), following the instructions on [GitHub Pages](https://helm.sh/docs/topics/chart_repository/#github-pages-example).
-
-
-### work09 ###
-[gcollis@morpheus helm-repos]$ git remote show origin
-* remote origin
-  Fetch URL: git@github.com:sjfke/helm-repos.git
-  Push  URL: git@github.com:sjfke/helm-repos.git
-  HEAD branch: main
-  Remote branches:
-    gh-pages tracked
-    main     tracked
-  Local branch configured for 'git pull':
-    main merges with remote main
-  Local ref configured for 'git push':
-    main pushes to main (up to date)
-
-2021-05-23: make a helm-repo repo as gh_pages, and use 'cr'
-
