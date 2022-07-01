@@ -743,6 +743,8 @@ $ helm uninstall lazy-cat
 
 ### Helm packing with local chart repo
 
+This uses ChartMuseuem as the local repo, see [Installing Local ChartMuseum from its Helm Chart](#installing-local-chartmuseum-from-its-helm-chart)
+
 ```bash
 $ ls -l
 total 4
@@ -800,12 +802,14 @@ $ curl -X DELETE http://my-chartmuseum-chartmuseum.apps-crc.testing/api/charts/f
 $ curl -F "chart=@flask-lorem-ipsum-0.1.0.tgz" -F "prov=@flask-lorem-ipsum-0.1.0.tgz.prov" http:///my-chartmuseum-chartmuseum.apps-crc.testing/api/charts
 {"saved":true}
 
+$ oc login -u developer -p developer https://api.crc.testing:6443
+$ oc whoami # developer
 $ oc project work01
 $ helm list
 NAME        	NAMESPACE	REVISION	UPDATED                                 	STATUS  	CHART                  	APP VERSION
 lazy-cat    	work01   	1       	2022-06-27 16:21:01.566456556 +0200 CEST	deployed	flask-lorem-ipsum-0.1.0	v0.1.0     
 
-$ helm uninstall lazy-cat # to avoid URL name clash 
+$ helm uninstall lazy-cat # to avoid URL name clash (** TODO: fix the docker repo versions **)
 release "lazy-cat" uninstalled
 
 $ helm install --verify lazy-cat my-chartmuseum/flask-lorem-ipsum
@@ -827,117 +831,6 @@ lazy-cat	work01   	1       	2022-07-01 16:58:25.429944381 +0200 CEST	deployed	fl
 
 $ firefox http://flask-lorem-ipsum.apps-crc.testing/
 ```
-
-### Installing Local ChartMuseum from its Helm Chart
-
-```bash
-$ oc whoami # developer
-$ oc new-project chartmuseum
-$ helm repo add chartmuseum https://chartmuseum.github.io/charts 
-$ helm repo update
-$ helm list
-NAME          	NAMESPACE  	REVISION	UPDATED                                 	STATUS  	CHART            	APP VERSION
-my-chartmuseum	chartmuseum	1       	2022-06-23 17:06:02.710156343 +0200 CEST	deployed	chartmuseum-3.8.0	0.14.0     
-$ helm install my-chartmuseum chartmuseum/chartmuseum --version 3.8.0 --set env.open.DISABLE_API=false
-```
-By default, the chartmuseum helm chart installs with DISABLE_API: true parameter, so, any request to `/api` does not work, (returns 404).
-So in the helm install it is `set DISABLE_API=false` on the command line.
-
-With a default CRC configuration the installation fails, with an error message like:
-
-```bash
-Error creating: pods "my-chartmuseum-6f56f884d-" is forbidden: 
-unable to validate against any security context constraint: [provider "anyuid": 
-Forbidden: not usable by user or serviceaccount, provider restricted: .spec.securityContext.fsGroup: Invalid value: []int64{1000}: 1000 is not an allowed group, provider "nonroot": 
-Forbidden: not usable by user or serviceaccount, provider "hostmount-anyuid": 
-Forbidden: not usable by user or serviceaccount, provider "machine-api-termination-handler": 
-Forbidden: not usable by user or serviceaccount, provider "hostnetwork": 
-Forbidden: not usable by user or serviceaccount, provider "hostaccess": 
-Forbidden: not usable by user or serviceaccount, provider "privileged": 
-Forbidden: not usable by user or serviceaccount]
-```
-
-A simple resolution is as follows, but **warning** This allows images to run as the root UID if no USER is specified in the Dockerfile.
-* [Enable Images to Run with USER in the Dockerfile](https://docs.openshift.com/container-platform/3.11/admin_guide/manage_scc.html)
-
-```bash
-# running the following as kubadmin, allows the install to proceed. 
-$ oc login -u kubeadmin -p $PASSWORD https://api.crc.testing:6443
-$ oc adm policy add-scc-to-group anyuid system:authenticated
-clusterrole.rbac.authorization.k8s.io/system:openshift:scc:anyuid added: "system:authenticated"
-$ oc logout
-
-# Resetting CRC defaults:
-$ oc login -u kubeadmin -p $PASSWORD https://api.crc.testing:6443
-$ oc adm policy remove-scc-from-group anyuid system:authenticated
-clusterrole.rbac.authorization.k8s.io/system:openshift:scc:anyuid removed: "system:authenticated"
-$ oc logout
-```
-Once policy change is applied the helm installation will complete, but notice it does not expose the service, so
-
-```bash
-$ oc expose service/my-chartmuseum
-$ firefox http://my-chartmuseum-chartmuseum.apps-crc.testing
-```
-
-To add the *flask-lorem-ipsum* chart to the *my-chartmuseum* repo.
-```bash
-$ helm repo add my-chartmuseum http://my-chartmuseum-chartmuseum.apps-crc.testing # add new chart repo
-$ helm package flask-lorem-ipsum/
-$ curl -X POST --data-binary "@flask-lorem-ipsum-0.1.0.tgz" http://my-chartmuseum-chartmuseum.apps-crc.testing/api/charts
-
-$ oc project work1
-$ helm repo update # get the latest index of all repos  
-$ helm install --dry-run --debug lazy-cat my-chartmuseum/flask-lorem-ipsum
-$ helm install lazy-cat my-chartmuseum/flask-lorem-ipsum
-$ helm list
-$ firefox http://flask-lorem-ipsum.apps-crc.testing/
-
-$ helm uninstall lazy-cat 
-```
-
-To remove the *flask-lorem-ipsum* chart to the *my-chartmuseum* repo.
-```bash
-$ curl -X DELETE http://my-chartmuseum-chartmuseum.apps-crc.testing/api/charts/flask-lorem-ipsum/0.1.0
-```
-
-By default, chartmuseum uses filesystem storage within the pod (directory /storage), so the contents are lost 
-if the pod is recreated. To overcome chartmuseum needs persistent storage which can be or configured to use `local file storage`, `etcd` or one of the supported `cloud storage solutions` 
-(Amazon S3, MinIO, DigitalOcean, Google Cloud Storage, Microsoft Azure Blob Storage...).
-
-##### add the steps for signing, verifying
-*** TODO ***
-
-Helm has [provenance tools](https://helm.sh/docs/topics/provenance/) to help verify the integrity and origin of a package.
-These are based on industry-standard tools based on PKI, GnuPG, and well-respected package managers, Helm can generate and verify signature files.
-
-* [A valid PGP keypair](https://docs.github.com/en/github/authenticating-to-github/generating-a-new-gpg-key) in a binary (not ASCII-armored) format
-* [The helm command line tool](https://helm.sh/docs/helm/helm/)
-* [GnuPG command line tools](https://www.tutorialspoint.com/unix_commands/gpg.htm)
-* [Keybase command line tools](https://book.keybase.io/guides/command-line) (optional)
-
-
-
-### Local JFrog Artifactory
-```bash
-$ oc whoami # kubeadmin
-$ oc new-project artifactory-jcr
-$ helm repo add jfrog https://charts.jfrog.io
-$ helm repo update
-$ helm upgrade --install jfrog-container-registry --set artifactory.postgresql.postgresqlPassword=<postgres_password> --namespace artifactory-jcr jfrog/artifactory-jcr
-$ helm upgrade --install jfrog-container-registry --set artifactory.postgresql.postgresqlPassword='P0stGre$' --namespace artifactory-jcr jfrog/artifactory-jcr
-Release "jfrog-container-registry" does not exist. Installing it now.
-NAME: jfrog-container-registry
-LAST DEPLOYED: Thu Jun 23 17:33:55 2022
-NAMESPACE: artifactory-jcr
-STATUS: deployed
-REVISION: 1
-TEST SUITE: None
-NOTES:
-Congratulations. You have just deployed JFrog Container Registry!
-
-```
-
 
 #### GPG keys setup
 
@@ -983,20 +876,9 @@ There is NO WARRANTY, to the extent permitted by law.
 Please select what kind of key you want:
    (1) RSA and RSA (default)
 ....
-
-# if this fails try the following, and repeat the full-generate-key
+# If this fails with: agent_genkey failed: No such file or directory
+# Try the following, and repeat the full-generate-key
 $ gpgconf --kill gpg-agent # fix gpg: agent_genkey failed: No such file or directory
-
-$ tree ~/.gnupg/
-/home/sjfke/.gnupg/
-├── openpgp-revocs.d
-│   └── 4836FDB95D33CEDF32EB3C757F3DE8A545C0A597.rev
-├── private-keys-v1.d
-│   ├── 19077755F3C27DC2F7EB6237BEA062265BAABBBC.key
-│   └── A8F32B53734AD7C52A8852C53B8D9447BBE1E546.key
-├── pubring.kbx
-├── pubring.kbx~
-└── trustdb.gpg
 
 # From: https://helm.sh/docs/topics/provenance/#the-workflow
 # If *GnuPG version 2*, it uses .kbx for key-rings, helm needs the old *GnuPG version 1* format 
@@ -1028,87 +910,104 @@ uid                  sjfke (Helm) <gcollis@ymail.com>
 $ gpg1 --list-secret-keys | grep uid
 uid                  sjfke (Helm) <gcollis@ymail.com>
 ```
-##### DELETE ME
 
-With GPG key-pair generated, now sign/validate the helm chart.
+### Installing Local ChartMuseum from its Helm Chart
 
 ```bash
-$ helm package --sign --key 'Sjfke' --keyring ~/.gnupg/secring.gpg ocp-sample-flask-docker/
-Password for key "Sjfke <gcollis@ymail.com>" >  
-Successfully packaged chart and saved it to: /home/gcollis/work08/ocp-sample-flask-docker-0.1.0.tgz
-
-$ ls -1 *tgz*
-ocp-sample-flask-docker-0.1.0.tgz
-ocp-sample-flask-docker-0.1.0.tgz.prov
-
-$ helm verify ocp-sample-flask-docker-0.1.0.tgz
-Signed by: Sjfke <gcollis@ymail.com>
-Using Key With Fingerprint: 2722B192EAAF3412D30CDC4810DBA57F355F960F
-Chart Hash Verified: sha256:fb430dadf740baeb0d83c9ad0e5fc65d8cb0843568e556651cc3212174b8e4a7
+$ oc login -u developer -p developer https://api.crc.testing:6443
+$ oc whoami # developer
+$ oc new-project chartmuseum
+$ helm repo add chartmuseum https://chartmuseum.github.io/charts 
+$ helm repo update
+$ helm list
+NAME          	NAMESPACE  	REVISION	UPDATED                                 	STATUS  	CHART            	APP VERSION
+my-chartmuseum	chartmuseum	1       	2022-06-23 17:06:02.710156343 +0200 CEST	deployed	chartmuseum-3.8.0	0.14.0     
+$ helm install my-chartmuseum chartmuseum/chartmuseum --version 3.8.0 --set env.open.DISABLE_API=false
 ```
-Installing the signed/verified helm chart.
+By default, the chartmuseum helm chart installs with DISABLE_API: true parameter, so, any request to `/api` does not work, (returns 404).
+So in the helm install it is `set DISABLE_API=false` on the command line.
+
+With a default CRC configuration the installation fails, with an error message like:
 
 ```bash
-$ helm install lazy-dog --verify ocp-sample-flask-docker-0.1.0.tgz
-NAME: lazy-dog
-LAST DEPLOYED: Mon May 24 18:24:25 2021
-NAMESPACE: sample-flask-helm
+Error creating: pods "my-chartmuseum-6f56f884d-" is forbidden: 
+unable to validate against any security context constraint: [provider "anyuid": 
+Forbidden: not usable by user or serviceaccount, provider restricted: .spec.securityContext.fsGroup: Invalid value: []int64{1000}: 1000 is not an allowed group, provider "nonroot": 
+Forbidden: not usable by user or serviceaccount, provider "hostmount-anyuid": 
+Forbidden: not usable by user or serviceaccount, provider "machine-api-termination-handler": 
+Forbidden: not usable by user or serviceaccount, provider "hostnetwork": 
+Forbidden: not usable by user or serviceaccount, provider "hostaccess": 
+Forbidden: not usable by user or serviceaccount, provider "privileged": 
+Forbidden: not usable by user or serviceaccount]
+```
+
+A simple resolution is as follows, but **warning** This allows images to run as the root UID if no USER is specified in the Dockerfile.
+* [Enable Images to Run with USER in the Dockerfile](https://docs.openshift.com/container-platform/3.11/admin_guide/manage_scc.html)
+
+```bash
+# running the following as kubadmin, allows the install to proceed. 
+$ oc login -u kubeadmin -p $PASSWORD https://api.crc.testing:6443
+$ oc adm policy add-scc-to-group anyuid system:authenticated
+clusterrole.rbac.authorization.k8s.io/system:openshift:scc:anyuid added: "system:authenticated"
+$ oc logout
+
+# Resetting CRC defaults:
+$ oc login -u kubeadmin -p $PASSWORD https://api.crc.testing:6443
+$ oc adm policy remove-scc-from-group anyuid system:authenticated
+clusterrole.rbac.authorization.k8s.io/system:openshift:scc:anyuid removed: "system:authenticated"
+$ oc logout
+```
+Once policy change is applied the helm installation will complete, but notice it does not expose the service, so this
+needs to be done manually.
+
+```bash
+$ oc expose service/my-chartmuseum
+$ firefox http://my-chartmuseum-chartmuseum.apps-crc.testing
+```
+
+To add the *flask-lorem-ipsum* chart to the *my-chartmuseum* repo.
+```bash
+$ helm repo add my-chartmuseum http://my-chartmuseum-chartmuseum.apps-crc.testing # add new chart repo
+$ helm package flask-lorem-ipsum/
+$ curl -X POST --data-binary "@flask-lorem-ipsum-0.1.0.tgz" http://my-chartmuseum-chartmuseum.apps-crc.testing/api/charts
+
+$ oc project work1
+$ helm repo update # get the latest index of all repos  
+$ helm install --dry-run --debug lazy-cat my-chartmuseum/flask-lorem-ipsum
+$ helm install lazy-cat my-chartmuseum/flask-lorem-ipsum
+$ helm list
+$ firefox http://flask-lorem-ipsum.apps-crc.testing/
+
+$ helm uninstall lazy-cat 
+```
+
+To remove the *flask-lorem-ipsum* chart to the *my-chartmuseum* repo.
+```bash
+$ curl -X DELETE http://my-chartmuseum-chartmuseum.apps-crc.testing/api/charts/flask-lorem-ipsum/0.1.0
+```
+
+By default, chartmuseum uses filesystem storage within the pod (directory /storage), so the contents are lost 
+if the pod is recreated. To overcome chartmuseum needs persistent storage which can be or configured to use `local file storage`, `etcd` or one of the supported `cloud storage solutions` 
+(Amazon S3, MinIO, DigitalOcean, Google Cloud Storage, Microsoft Azure Blob Storage...).
+
+### Installing Local JFrog Artifactory from its Helm Chart
+
+*** TODO - fix the physical volume claims issue ***
+
+```bash
+$ oc whoami # kubeadmin
+$ oc new-project artifactory-jcr
+$ helm repo add jfrog https://charts.jfrog.io
+$ helm repo update
+$ helm upgrade --install jfrog-container-registry --set artifactory.postgresql.postgresqlPassword=<postgres_password> --namespace artifactory-jcr jfrog/artifactory-jcr
+$ helm upgrade --install jfrog-container-registry --set artifactory.postgresql.postgresqlPassword='P0stGre$' --namespace artifactory-jcr jfrog/artifactory-jcr
+Release "jfrog-container-registry" does not exist. Installing it now.
+NAME: jfrog-container-registry
+LAST DEPLOYED: Thu Jun 23 17:33:55 2022
+NAMESPACE: artifactory-jcr
 STATUS: deployed
 REVISION: 1
+TEST SUITE: None
 NOTES:
-1. Get the application URL by running these commands:
-  export POD_NAME=$(oc get pods --namespace sample-flask-helm -l "app.kubernetes.io/name=ocp-sample-flask-docker,app.kubernetes.io/instance=lazy-dog" -o jsonpath="{.items[0].metadata.name}")
-  export CONTAINER_PORT=$(oc get pod --namespace sample-flask-helm $POD_NAME -o jsonpath="{.spec.containers[0].ports[0].containerPort}")
-  echo "Visit http://127.0.0.1:8080 to use your application"
-  oc --namespace sample-flask-helm port-forward $POD_NAME 8080:$CONTAINER_PORT
-[gcollis@morpheus work08]$ oc get all
-NAME                                                    READY   STATUS              RESTARTS   AGE
-pod/lazy-dog-ocp-sample-flask-docker-564965c65c-pgr8k   0/1     ContainerCreating   0          6s
-
-NAME                                       TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)    AGE
-service/lazy-dog-ocp-sample-flask-docker   ClusterIP   10.217.5.48   <none>        8080/TCP   7s
-
-NAME                                               READY   UP-TO-DATE   AVAILABLE   AGE
-deployment.apps/lazy-dog-ocp-sample-flask-docker   0/1     1            0           7s
-
-NAME                                                          DESIRED   CURRENT   READY   AGE
-replicaset.apps/lazy-dog-ocp-sample-flask-docker-564965c65c   1         1         0       7s
-
-# URL: http://<service-name>-<project-name>.apps-crc.testing/
-$ firefox http://lazy-dog-ocp-sample-flask-docker-sample-flask-helm.apps-crc.testing/
-
-# uninstall
-$ helm uninstall lazy-dog  # release "lazy-dog" uninstalled
+Congratulations. You have just deployed JFrog Container Registry!
 ```
-************************************************
-*********** 30.05.2021 *************************
-************************************************
-
-## Creating a Helm Chart Repo
-
-There are many ways to do this, a helm chart repository is simply a web-server with a given structure.
-
-The approach described uses [GitHub Pages](https://helm.sh/docs/topics/chart_repository/#github-pages-example), but many others are possible such as, [Google Cloud Storage](https://helm.sh/docs/topics/chart_repository/#google-cloud-storage), [JFrog Artifactory](https://helm.sh/docs/topics/chart_repository/#jfrog-artifactory).
-
-* [Helm: Chart Repository Guide](https://helm.sh/docs/topics/chart_repository/)
-* [Automate Helm chart repository publishing with GitHub Actions and Pages](https://medium.com/@stefanprodan/automate-helm-chart-repository-publishing-with-github-actions-and-pages-8a374ce24cf4)
-
-First create a new GitHub project to host your helm repos, [sjfke/helm-repos](https://github.com/sjfke/helm-repos), following the instructions on [GitHub Pages](https://helm.sh/docs/topics/chart_repository/#github-pages-example).
-
-
-### work09 ###
-[gcollis@morpheus helm-repos]$ git remote show origin
-* remote origin
-  Fetch URL: git@github.com:sjfke/helm-repos.git
-  Push  URL: git@github.com:sjfke/helm-repos.git
-  HEAD branch: main
-  Remote branches:
-    gh-pages tracked
-    main     tracked
-  Local branch configured for 'git pull':
-    main merges with remote main
-  Local ref configured for 'git push':
-    main pushes to main (up to date)
-
-2021-05-23: make a helm-repo repo as gh_pages, and use 'cr'
-
