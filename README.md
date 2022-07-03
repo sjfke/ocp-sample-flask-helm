@@ -741,9 +741,9 @@ $ helm uninstall lazy-cat
 * [JFrog Container Registry Helm Chart - ArtifactHUB](https://artifacthub.io/packages/helm/jfrog/artifactory-jcr)
 * [Kubernetes Helm Chart Repositories - JFROG Artifactory](https://www.jfrog.com/confluence/display/JFROG/Kubernetes+Helm+Chart+Repositories)
 
-### Helm packing with local chart repo
+### Helm packing with local ChartMuseum repo
 
-This uses ChartMuseuem as the local repo, see [Installing Local ChartMuseum from its Helm Chart](#installing-local-chartmuseum-from-its-helm-chart)
+This uses ChartMuseum as the local repo, see [Installing Local ChartMuseum from its Helm Chart](#installing-local-chartmuseum-from-its-helm-chart)
 
 ```bash
 $ ls -l
@@ -767,8 +767,26 @@ NAME                            	CHART VERSION	APP VERSION	DESCRIPTION
 my-chartmuseum/flask-lorem-ipsum	0.1.0        	v0.1.0     	A Helm chart for Kubernetes
 ```
 
-Your chart can be signed and verified using a GPG key, see [GPG keys setup](#gpg-keys-setup), as described in
-[Helm Provenance and Integrity - The Workflow](https://helm.sh/docs/topics/provenance/#the-workflow)
+To replace the chart with a newer version it needs to removed from *my-chartmuseum* repo.
+```bash
+$ curl -X DELETE http://my-chartmuseum-chartmuseum.apps-crc.testing/api/charts/flask-lorem-ipsum/0.1.0
+$ curl -X POST --data-binary "@flask-lorem-ipsum-0.1.0.tgz" http://my-chartmuseum-chartmuseum.apps-crc.testing/api/charts
+$ helm search repo my-chartmuseum
+NAME                            	CHART VERSION	APP VERSION	DESCRIPTION                
+my-chartmuseum/flask-lorem-ipsum	0.1.0        	v0.1.0     	A Helm chart for Kubernetes
+```
+
+To deploy this chart
+```bash
+$ oc project work1
+$ helm repo update # get the latest index of all repos  
+$ helm install --dry-run --debug lazy-cat my-chartmuseum/flask-lorem-ipsum
+$ helm install lazy-cat my-chartmuseum/flask-lorem-ipsum
+```
+
+To provide greater security your chart can be signed using a GPG key, see [GPG keys setup](#gpg-keys-setup), as described in
+[Helm Provenance and Integrity - The Workflow](https://helm.sh/docs/topics/provenance/#the-workflow), and the signature
+verified during the installation.
 
 ```bash
 $ gpg1 --list-keys | grep uid
@@ -789,12 +807,14 @@ drwxr-xr-x 4 sjfke sjfke 4096 Jun 30 21:21 flask-lorem-ipsum
 -rw-rw-r-- 1 sjfke sjfke 4056 Jul  1 16:29 flask-lorem-ipsum-0.1.0.tgz
 -rw-r--r-- 1 sjfke sjfke  925 Jul  1 16:29 flask-lorem-ipsum-0.1.0.tgz.prov
 
-$ $ helm verify flask-lorem-ipsum-0.1.0.tgz
+# Check the signature
+$ helm verify flask-lorem-ipsum-0.1.0.tgz
 Signed by: sjfke (Helm) <gcollis@ymail.com>
 Using Key With Fingerprint: F50B1542D6DD4EB3946995715042BA8D7FA9B776
 Chart Hash Verified: sha256:fc6ec3d09a5133fd32a8be6d3f7e5cc7f300c18b5e7d99466fbc37d576da1365
 
-# Delete the chart from my-chartmuseum
+# If necessary delete the previous version of this chart from my-chartmuseum
+$ helm repo search my-chartmuseum
 $ curl -X DELETE http://my-chartmuseum-chartmuseum.apps-crc.testing/api/charts/flask-lorem-ipsum/0.1.0
 {"deleted":true}
 
@@ -805,14 +825,16 @@ $ curl -F "chart=@flask-lorem-ipsum-0.1.0.tgz" -F "prov=@flask-lorem-ipsum-0.1.0
 $ oc login -u developer -p developer https://api.crc.testing:6443
 $ oc whoami # developer
 $ oc project work01
+
+# If necessary uninstall lazy-cat
 $ helm list
 NAME        	NAMESPACE	REVISION	UPDATED                                 	STATUS  	CHART                  	APP VERSION
 lazy-cat    	work01   	1       	2022-06-27 16:21:01.566456556 +0200 CEST	deployed	flask-lorem-ipsum-0.1.0	v0.1.0     
-
-$ helm uninstall lazy-cat # to avoid URL name clash (** TODO: fix the docker repo versions **)
+$ helm uninstall lazy-cat
 release "lazy-cat" uninstalled
 
-$ helm install --verify lazy-cat my-chartmuseum/flask-lorem-ipsum
+$ helm install --verify lazy-cat flask-lorem-ipsum                # local .tgz, .tgz.prov files
+$ helm install --verify lazy-cat my-chartmuseum/flask-lorem-ipsum # my-chartmuseum version (.tgz, .tgz.prov)
 NAME: lazy-cat
 LAST DEPLOYED: Fri Jul  1 16:58:25 2022
 NAMESPACE: work01
@@ -832,7 +854,190 @@ lazy-cat	work01   	1       	2022-07-01 16:58:25.429944381 +0200 CEST	deployed	fl
 $ firefox http://flask-lorem-ipsum.apps-crc.testing/
 ```
 
-#### GPG keys setup
+#### Helm Upgrade and Rollback
+
+There are 3 versions of [flask-lorem-ipsum on the DockerHub repo](https://hub.docker.com/repository/docker/sjfke/flask-lorem-ipsum)
+versions `0.1.0`, `0.2.0` and `0.3.0`which are identical apart from the version number and a different 
+[bootstrap 4 color theme](https://bootstrap.themes.guide/).
+
+The `flask-lorem-ipsum` helm chart will be modified for each release and these will be used to illustrate `helm upgrade`
+and `helm rollback`. 
+
+Conveniently, the chart name does not change, so the chart does not have to be recreated from scratch
+only `Chart.yaml` and `values.yaml` need minor updates. Notice that the `Chart.version`, and the 
+`Chart.appVersion` are both updated even though there are no fundamental changes to the Helm chart itself.
+
+```bash
+$ cp -R flask-lorem-ipsum flask-lorem-ipsum-v0.2.0
+$ cp -R flask-lorem-ipsum flask-lorem-ipsum-v0.3.0
+
+$ diff flask-lorem-ipsum flask-lorem-ipsum-v0.2.0
+Common subdirectories: flask-lorem-ipsum/charts and flask-lorem-ipsum-v0.2.0/charts
+diff flask-lorem-ipsum/Chart.yaml flask-lorem-ipsum-v0.2.0/Chart.yaml
+18c18
+< version: 0.1.0
+---
+> version: 0.2.0
+24c24
+< appVersion: "v0.1.0" # was: "1.16.0"
+---
+> appVersion: "v0.2.0" # was: "1.16.0"
+Common subdirectories: flask-lorem-ipsum/templates and flask-lorem-ipsum-v0.2.0/templates
+diff flask-lorem-ipsum/values.yaml flask-lorem-ipsum-v0.2.0/values.yaml
+21c21
+<   tag: "v0.1.0" # was: ""
+---
+>   tag: "v0.2.0" # was: ""
+
+$ diff flask-lorem-ipsum flask-lorem-ipsum-v0.3.0
+Common subdirectories: flask-lorem-ipsum/charts and flask-lorem-ipsum-v0.3.0/charts
+diff flask-lorem-ipsum/Chart.yaml flask-lorem-ipsum-v0.3.0/Chart.yaml
+18c18
+< version: 0.1.0
+---
+> version: 0.3.0
+24c24
+< appVersion: "v0.1.0" # was: "1.16.0"
+---
+> appVersion: "v0.3.0" # was: "1.16.0"
+Common subdirectories: flask-lorem-ipsum/templates and flask-lorem-ipsum-v0.3.0/templates
+diff flask-lorem-ipsum/values.yaml flask-lorem-ipsum-v0.3.0/values.yaml
+21c21
+<   tag: "v0.1.0" # was: ""
+---
+>   tag: "v0.3.0" # was: ""
+```
+
+To check the modifications (lazy-dog = v0.1.0, lazy-cat = v0.2.0, lazy-bug = v0.3.0)
+```bash
+$ helm install --dry-run --debug lazy-dog flask-lorem-ipsum
+$ helm install lazy-dog flask-lorem-ipsum
+$ helm install --dry-run --debug lazy-cat flask-lorem-ipsum-v0.2.0/ 
+$ helm install lazy-dog flask-lorem-ipsum 
+$ helm install --dry-run --debug lazy-bug flask-lorem-ipsum-v0.3.0/ 
+$ helm install lazy-bug flask-lorem-ipsum-v0.3.0/ 
+
+# Note all same revision because 'helm install', not 'helm upgrade' 
+$ helm list
+NAME    	NAMESPACE	REVISION	UPDATED                                 	STATUS  	CHART                  	APP VERSION
+lazy-bug	work01   	1       	2022-07-03 14:00:40.572254818 +0200 CEST	deployed	flask-lorem-ipsum-0.3.0	v0.3.0     
+lazy-cat	work01   	1       	2022-07-03 13:57:59.801841343 +0200 CEST	deployed	flask-lorem-ipsum-0.2.0	v0.2.0     
+lazy-dog	work01   	1       	2022-07-03 13:57:47.75808608 +0200 CEST 	deployed	flask-lorem-ipsum-0.1.0	v0.1.0     
+
+$ firefox http://flask-lorem-ipsum-v0.1.0.apps-crc.testing/
+$ firefox http://flask-lorem-ipsum-v0.2.0.apps-crc.testing/
+$ firefox http://flask-lorem-ipsum-v0.3.0.apps-crc.testing/
+
+$ helm uninstall lazy-dog lazy-cat lazy-bug
+```
+
+```bash
+$ helm install lazy-dog flask-lorem-ipsum 
+NAME: lazy-dog
+LAST DEPLOYED: Sun Jul  3 15:18:04 2022
+NAMESPACE: work01
+STATUS: deployed
+REVISION: 1
+...
+$ helm upgrade lazy-dog flask-lorem-ipsum-v0.2.0
+Error: UPGRADE FAILED: cannot patch "lazy-dog-flask-lorem-ipsum" with kind Route: Route.route.openshift.io "lazy-dog-flask-lorem-ipsum" is invalid: spec.host: Invalid value: "flask-lorem-ipsum-v0.2.0.apps-crc.testing": field is immutable
+```
+
+The easiest way to fix this issue is uncomment the `route.host` line in the `values.yaml` file in all the charts.
+
+```bash
+$ cat -n flask-lorem-ipsum/values.yaml | tail -n +8 | head -n 8
+     8	
+     9	# Expose the route host (URL) and targetPort
+    10	route:
+    11	  host: flask-lorem-ipsum.apps-crc.testing
+    12	  port:
+    13	    targetPort: "http"
+    14	
+    15	replicaCount: 1
+    
+$ helm install lazy-dog flask-lorem-ipsum
+$ helm list
+NAME    	NAMESPACE	REVISION	UPDATED                                 	STATUS  	CHART                  	APP VERSION
+lazy-dog	work01   	1       	2022-07-03 18:00:10.546182232 +0200 CEST	deployed	flask-lorem-ipsum-0.1.0	v0.1.0     
+
+$ helm upgrade lazy-dog flask-lorem-ipsum-v0.2.0
+Release "lazy-dog" has been upgraded. Happy Helming!
+$ helm list
+NAME    	NAMESPACE	REVISION	UPDATED                                 	STATUS  	CHART                  	APP VERSION
+lazy-dog	work01   	2       	2022-07-03 18:00:45.601138471 +0200 CEST	deployed	flask-lorem-ipsum-0.2.0	v0.2.0     
+
+$ helm upgrade lazy-dog flask-lorem-ipsum-v0.3.0
+Release "lazy-dog" has been upgraded. Happy Helming!
+$ helm list
+NAME    	NAMESPACE	REVISION	UPDATED                                 	STATUS  	CHART                  	APP VERSION
+lazy-dog	work01   	3       	2022-07-03 18:01:16.552781951 +0200 CEST	deployed	flask-lorem-ipsum-0.3.0	v0.3.0     
+
+$ helm rollback lazy-dog 2
+Rollback was a success! Happy Helming!
+$ helm list
+NAME    	NAMESPACE	REVISION	UPDATED                                 	STATUS  	CHART                  	APP VERSION
+lazy-dog	work01   	4       	2022-07-03 18:01:31.139790672 +0200 CEST	deployed	flask-lorem-ipsum-0.2.0	v0.2.0    
+```
+
+To avoid updating the `values.route.host ` in all the charts, this can be done via a CLI `--set` or an external YAML file.
+
+Specifying `route.host` on the CLI
+```bash
+$ helm install --set route.host=flask-lorem-ipsum.apps-crc.testing lazy-dog flask-lorem-ipsum
+$ helm list
+NAME    	NAMESPACE	REVISION	UPDATED                                	STATUS  	CHART                  	APP VERSION
+lazy-dog	work01   	1       	2022-07-03 17:32:44.40361522 +0200 CEST	deployed	flask-lorem-ipsum-0.1.0	v0.1.0     
+
+$ helm upgrade --set route.host=flask-lorem-ipsum.apps-crc.testing lazy-dog flask-lorem-ipsum-v0.2.0
+Release "lazy-dog" has been upgraded. Happy Helming!
+$ helm list
+NAME    	NAMESPACE	REVISION	UPDATED                                 	STATUS  	CHART                  	APP VERSION
+lazy-dog	work01   	2       	2022-07-03 17:33:15.638318735 +0200 CEST	deployed	flask-lorem-ipsum-0.2.0	v0.2.0     
+
+$ helm upgrade --set route.host=flask-lorem-ipsum.apps-crc.testing lazy-dog flask-lorem-ipsum-v0.3.0
+Release "lazy-dog" has been upgraded. Happy Helming!
+$ helm list
+NAME    	NAMESPACE	REVISION	UPDATED                                 	STATUS  	CHART                  	APP VERSION
+lazy-dog	work01   	3       	2022-07-03 17:33:34.506567411 +0200 CEST	deployed	flask-lorem-ipsum-0.3.0	v0.3.0     
+
+$ helm rollback lazy-dog 2
+Rollback was a success! Happy Helming!
+$ helm list
+NAME    	NAMESPACE	REVISION	UPDATED                                 	STATUS  	CHART                  	APP VERSION
+lazy-dog	work01   	4       	2022-07-03 17:34:19.575881478 +0200 CEST	deployed	flask-lorem-ipsum-0.2.0	v0.2.0     
+```
+Specify the `route.host` in an external YAML file
+
+```bash
+$ cat host-route.yaml 
+route:
+  host: flask-lorem-ipsum.apps-crc.testing
+
+$ helm install lazy-dog -f host-route.yaml flask-lorem-ipsum
+Release "lazy-dog" has been upgraded. Happy Helming!
+$ helm list
+NAME    	NAMESPACE	REVISION	UPDATED                                 	STATUS  	CHART                  	APP VERSION
+lazy-dog	work01   	1       	2022-07-03 17:17:45.168481382 +0200 CEST	deployed	flask-lorem-ipsum-0.1.0	v0.1.0     
+
+$ helm upgrade lazy-dog -f host-route.yaml flask-lorem-ipsum-v0.2.0
+Release "lazy-dog" has been upgraded. Happy Helming!
+$ helm list
+NAME    	NAMESPACE	REVISION	UPDATED                                 	STATUS  	CHART                  	APP VERSION
+lazy-dog	work01   	2       	2022-07-03 17:18:05.475443732 +0200 CEST	deployed	flask-lorem-ipsum-0.2.0	v0.2.0     
+$ helm upgrade lazy-dog -f host-route.yaml flask-lorem-ipsum-v0.3.0
+$ helm list
+NAME    	NAMESPACE	REVISION	UPDATED                                	STATUS  	CHART                  	APP VERSION
+lazy-dog	work01   	3       	2022-07-03 17:18:24.64226263 +0200 CEST	deployed	flask-lorem-ipsum-0.3.0	v0.3.0     
+
+$ helm rollback lazy-dog 1
+Rollback was a success! Happy Helming!
+$ helm list
+NAME    	NAMESPACE	REVISION	UPDATED                                 	STATUS  	CHART                  	APP VERSION
+lazy-dog	work01   	4       	2022-07-03 17:18:42.988940372 +0200 CEST	deployed	flask-lorem-ipsum-0.1.0	v0.1.0     
+```
+
+### GPG keys setup
 
 * [A valid PGP keypair](https://docs.github.com/en/github/authenticating-to-github/generating-a-new-gpg-key) in a binary (not ASCII-armored) format
 * [GnuPG command line tools](https://www.tutorialspoint.com/unix_commands/gpg.htm)
