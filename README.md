@@ -339,7 +339,7 @@ $ rm templates/NOTES.txt.cln
     22	{{- end }}
 ```
 
-# Test and Deploy the Helm Chart
+# Test and Deploy flask-lorem-ipsum using the Helm Chart
 
 ```bash
 $ ls -l
@@ -424,7 +424,7 @@ $ oc rsh lazy-dog-flask-lorem-ipsum-7878dbb69c-mk88n
 
 ![Image Deployed Helm Chart](./screenshots/deployed-helm-chart.png)
 
-### Uninstall
+### Uninstall flask-lorem-ipsum using the Helm Chart
 
 ```bash
 $ helm list
@@ -733,6 +733,8 @@ $ helm uninstall lazy-cat
 
 ## Chart Repositories
 
+Like the Docker images themselves, helm charts, can be saved to a [remote] helm chart repo. 
+
 ### References consulted
 * [Helm: The Chart Repository Guide](https://helm.sh/docs/topics/chart_repository/)
 * [ChartMuseum - Documentation](https://chartmuseum.com/docs/)
@@ -814,7 +816,7 @@ Using Key With Fingerprint: F50B1542D6DD4EB3946995715042BA8D7FA9B776
 Chart Hash Verified: sha256:fc6ec3d09a5133fd32a8be6d3f7e5cc7f300c18b5e7d99466fbc37d576da1365
 
 # If necessary delete the previous version of this chart from my-chartmuseum
-$ helm repo search my-chartmuseum
+$ helm search repo my-chartmuseum
 $ curl -X DELETE http://my-chartmuseum-chartmuseum.apps-crc.testing/api/charts/flask-lorem-ipsum/0.1.0
 {"deleted":true}
 
@@ -857,7 +859,7 @@ $ firefox http://flask-lorem-ipsum.apps-crc.testing/
 #### Helm Upgrade and Rollback
 
 There are 3 versions of [flask-lorem-ipsum on the DockerHub repo](https://hub.docker.com/repository/docker/sjfke/flask-lorem-ipsum)
-versions `0.1.0`, `0.2.0` and `0.3.0`which are identical apart from the version number and a different 
+ `0.1.0`, `0.2.0` and `0.3.0`which are identical apart from the version number and a different 
 [bootstrap 4 color theme](https://bootstrap.themes.guide/).
 
 The `flask-lorem-ipsum` helm chart will be modified for each release and these will be used to illustrate `helm upgrade`
@@ -866,6 +868,8 @@ and `helm rollback`.
 Conveniently, the chart name does not change, so the chart does not have to be recreated from scratch
 only `Chart.yaml` and `values.yaml` need minor updates. Notice that the `Chart.version`, and the 
 `Chart.appVersion` are both updated even though there are no fundamental changes to the Helm chart itself.
+
+Performing an `helm upgrade` or `helm rollback` is likely to impact site availability so be sure to test the impact.
 
 ```bash
 $ cp -R flask-lorem-ipsum flask-lorem-ipsum-v0.2.0
@@ -884,6 +888,10 @@ diff flask-lorem-ipsum/Chart.yaml flask-lorem-ipsum-v0.2.0/Chart.yaml
 > appVersion: "v0.2.0" # was: "1.16.0"
 Common subdirectories: flask-lorem-ipsum/templates and flask-lorem-ipsum-v0.2.0/templates
 diff flask-lorem-ipsum/values.yaml flask-lorem-ipsum-v0.2.0/values.yaml
+18c18
+< version: 0.1.0
+---
+> version: 0.3.0
 21c21
 <   tag: "v0.1.0" # was: ""
 ---
@@ -908,12 +916,12 @@ diff flask-lorem-ipsum/values.yaml flask-lorem-ipsum-v0.3.0/values.yaml
 >   tag: "v0.3.0" # was: ""
 ```
 
-To check the modifications (lazy-dog = v0.1.0, lazy-cat = v0.2.0, lazy-bug = v0.3.0)
+Checking the modifications (lazy-dog = v0.1.0, lazy-cat = v0.2.0, lazy-bug = v0.3.0)
 ```bash
 $ helm install --dry-run --debug lazy-dog flask-lorem-ipsum
 $ helm install lazy-dog flask-lorem-ipsum
 $ helm install --dry-run --debug lazy-cat flask-lorem-ipsum-v0.2.0/ 
-$ helm install lazy-dog flask-lorem-ipsum 
+$ helm install lazy-cat flask-lorem-ipsum 
 $ helm install --dry-run --debug lazy-bug flask-lorem-ipsum-v0.3.0/ 
 $ helm install lazy-bug flask-lorem-ipsum-v0.3.0/ 
 
@@ -973,6 +981,11 @@ $ helm list
 NAME    	NAMESPACE	REVISION	UPDATED                                 	STATUS  	CHART                  	APP VERSION
 lazy-dog	work01   	3       	2022-07-03 18:01:16.552781951 +0200 CEST	deployed	flask-lorem-ipsum-0.3.0	v0.3.0     
 
+$ helm list --superseded 
+NAME    	NAMESPACE	REVISION	UPDATED                                 	STATUS    	CHART                  	APP VERSION
+lazy-dog	work01   	1       	2022-07-03 18:00:45.601138471 +0200 CEST	superseded	flask-lorem-ipsum-0.1.0	v0.1.0     
+lazy-dog	work01   	2       	2022-07-03 18:01:16.552781951 +0200 CEST	superseded	flask-lorem-ipsum-0.2.0	v0.2.0     
+
 $ helm rollback lazy-dog 2
 Rollback was a success! Happy Helming!
 $ helm list
@@ -1007,7 +1020,7 @@ $ helm list
 NAME    	NAMESPACE	REVISION	UPDATED                                 	STATUS  	CHART                  	APP VERSION
 lazy-dog	work01   	4       	2022-07-03 17:34:19.575881478 +0200 CEST	deployed	flask-lorem-ipsum-0.2.0	v0.2.0     
 ```
-Specify the `route.host` in an external YAML file
+To avoid updating the `values.route.host ` in all the charts, you can specify it in an external YAML file, `route.host`. 
 
 ```bash
 $ cat host-route.yaml 
@@ -1035,6 +1048,74 @@ Rollback was a success! Happy Helming!
 $ helm list
 NAME    	NAMESPACE	REVISION	UPDATED                                 	STATUS  	CHART                  	APP VERSION
 lazy-dog	work01   	4       	2022-07-03 17:18:42.988940372 +0200 CEST	deployed	flask-lorem-ipsum-0.1.0	v0.1.0     
+```
+
+#### Helm Upgrade and Rollback using ChartMuseum and verification
+
+This is basically the same as the previous [Helm Upgrade and Rollback](#helm-upgrade-and-rollback) section, but with 
+some additional modifications to the helm charts to avoid `--set` and `-f host-route.yaml` command line settings, 
+summarizing the changes:
+
+```bash
+$ oc login -u developer -p developer https://api.crc.testing:6443
+$ oc whoami # developer
+$ oc project work1
+
+# repeat the modifications from 
+$ cp -R flask-lorem-ipsum flask-lorem-ipsum-v0.2.0
+$ cp -R flask-lorem-ipsum flask-lorem-ipsum-v0.3.0
+```
+
+Edit the `Chart.yaml` and `values.yaml` in each chart as in [Helm Upgrade and Rollback](#helm-upgrade-and-rollback) section.
+
+* change `chart.appVersion: "v0.1.0"` to `"v0.2.0"` or `"v0.3.0"`
+* change `chart.version: 0.1.0` to `0.2.0` or `0.3.0`
+* uncomment `values.route.host: flask-lorem-ipsum.apps-crc.testing`
+* change `values.image.tag: "v0.1.0"` to `"v0.2.0"` or `"v0.3.0"`
+
+```bash
+# check your changes
+$ diff flask-lorem-ipsum flask-lorem-ipsum-v0.2.0
+$ diff flask-lorem-ipsum flask-lorem-ipsum-v0.3.0
+
+# sign and verify
+$ helm package --debug --sign --key sjfke --keyring ~/.gnupg/secring.gpg flask-lorem-ipsum
+$ helm package --debug --sign --key sjfke --keyring ~/.gnupg/secring.gpg flask-lorem-ipsum-v0.2.0
+$ helm package --debug --sign --key sjfke --keyring ~/.gnupg/secring.gpg flask-lorem-ipsum-v0.3.0
+$ helm verify flask-lorem-ipsum-0.1.0.tgz
+$ helm verify flask-lorem-ipsum-0.2.0.tgz
+$ helm verify flask-lorem-ipsum-0.3.0.tgz
+
+# push to 'my-chartmuseum'
+$ curl -F "chart=@flask-lorem-ipsum-0.1.0.tgz" -F "prov=@flask-lorem-ipsum-0.1.0.tgz.prov" http:///my-chartmuseum-chartmuseum.apps-crc.testing/api/charts
+$ curl -F "chart=@flask-lorem-ipsum-0.2.0.tgz" -F "prov=@flask-lorem-ipsum-0.2.0.tgz.prov" http:///my-chartmuseum-chartmuseum.apps-crc.testing/api/charts
+$ curl -F "chart=@flask-lorem-ipsum-0.3.0.tgz" -F "prov=@flask-lorem-ipsum-0.3.0.tgz.prov" http:///my-chartmuseum-chartmuseum.apps-crc.testing/api/charts
+
+$ helm repo update
+$ helm search repo my-chartmuseum -l # without '-l' only lists latest version
+NAME                            	CHART VERSION	APP VERSION	DESCRIPTION                       
+my-chartmuseum/flask-lorem-ipsum	0.3.0        	v0.3.0     	A Helm chart for flask-lorem-ipsum
+my-chartmuseum/flask-lorem-ipsum	0.2.0        	v0.2.0     	A Helm chart for flask-lorem-ipsum
+my-chartmuseum/flask-lorem-ipsum	0.1.0        	v0.1.0     	A Helm chart for flask-lorem-ipsum
+
+$ helm --verify install lazy-dog my-chartmuseum/flask-lorem-ipsum --version v0.1.0
+$ helm list
+NAME    	NAMESPACE	REVISION	UPDATED                                 	STATUS  	CHART                  	APP VERSION
+lazy-dog	work01   	1       	2022-07-05 12:36:47.535998999 +0200 CEST	deployed	flask-lorem-ipsum-0.1.0	v0.1.0     
+
+# Note: it does not show that the my-chartmuseum repo is being used... any ideas please let me know.
+# One way to validate is to change directory that does not contain the source, .tgz or .tgz.prov files.
+
+$ helm --verify install lazy-dog my-chartmuseum/flask-lorem-ipsum --version v0.1.0
+$ helm upgrade lazy-dog my-chartmuseum/flask-lorem-ipsum --version v0.2.0 --verify
+$ helm upgrade --verify lazy-dog my-chartmuseum/flask-lorem-ipsum --version v0.3.0
+$ helm list --superseded 
+NAME    	NAMESPACE	REVISION	UPDATED                                 	STATUS    	CHART                  	APP VERSION
+lazy-dog	work01   	1       	2022-07-05 19:31:34.803295701 +0200 CEST	superseded	flask-lorem-ipsum-0.1.0	v0.1.0     
+lazy-dog	work01   	2       	2022-07-05 19:31:58.991843968 +0200 CEST	superseded	flask-lorem-ipsum-0.2.0	v0.2.0     
+
+$ helm rollback --dry-run lazy-dog  1 # check rollback would work
+$ helm rollback lazy-dog  1
 ```
 
 ### GPG keys setup
@@ -1116,7 +1197,7 @@ $ gpg1 --list-secret-keys | grep uid
 uid                  sjfke (Helm) <gcollis@ymail.com>
 ```
 
-### Installing Local ChartMuseum from its Helm Chart
+### Installing Local ChartMuseum using its Helm Chart
 
 ```bash
 $ oc login -u developer -p developer https://api.crc.testing:6443
@@ -1192,7 +1273,8 @@ $ curl -X DELETE http://my-chartmuseum-chartmuseum.apps-crc.testing/api/charts/f
 ```
 
 By default, chartmuseum uses filesystem storage within the pod (directory /storage), so the contents are lost 
-if the pod is recreated. To overcome chartmuseum needs persistent storage which can be or configured to use `local file storage`, `etcd` or one of the supported `cloud storage solutions` 
+if the pod is recreated, to overcome this, chartmuseum can be configured to use persistent storage,
+such as `local file storage`, `etcd` or one of the supported `cloud storage solutions` 
 (Amazon S3, MinIO, DigitalOcean, Google Cloud Storage, Microsoft Azure Blob Storage...).
 
 ### Installing Local JFrog Artifactory from its Helm Chart
