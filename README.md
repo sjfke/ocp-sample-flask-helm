@@ -4,22 +4,22 @@
 
 # Helm: Simple Flask Example
 
-Demonstrates how to use and create a Helm chart using Docker containers.
-
-The example is taken [Build Flask Docker container and deploy to OpenShift](https://github.com/sjfke/ocp-sample-flask-docker)
+Demonstrates how to use and create a Helm chart using Docker containers,
+developed in [Build Flask Docker container and deploy to OpenShift](https://github.com/sjfke/ocp-sample-flask-docker)
 which is a simple Python Flask web application used which provides static ``Lorem Ipsum`` pages in various styles. 
 
 Various pre-built docker containers are available on [DockerHub](https://hub.docker.com/repository/docker/sjfke/flask-lorem-ipsum), 
 and [Quay IO](https://quay.io/repository/sjfke/flask-lorem-ipsum). Notice there are three version
-``v0.1.0``, ``v0.2.0`` and ``v0.3.0`` which are identical apart from the version number and a different 
+``v0.1.0``, ``v0.2.0`` and ``v0.3.0`` which are identical apart from the version number and a different *ugly*
 [bootstrap 4 color theme](https://bootstrap.themes.guide/). 
 
 A ``Helm chart`` will be generated for ``v0.1.0`` and then changed to support the other versions to demonstrate 
 [helm upgrade](https://helm.sh/docs/helm/helm_upgrade/) and [helm rollback](https://helm.sh/docs/helm/helm_rollback/)
+Signing, verifying and using a helm chart repository, [ChartMuseum](https://chartmuseum.com/docs/), are also demonstrated.
 
 ## OpenShift Environment
 
-The deployment was tested using *Red Hat CodeReady Containers* (CRC) details of which can be found here:
+The deployment uses *Red Hat CodeReady Containers* (CRC) details of which can be found here:
 
 * [Introducing Red Hat CodeReady Containers](https://code-ready.github.io/crc/);
 * [Red Hat OpenShift 4 on your laptop: Introducing Red Hat CodeReady Containers](https://developers.redhat.com/blog/2019/09/05/red-hat-openshift-4-on-your-laptop-introducing-red-hat-codeready-containers/);
@@ -103,9 +103,10 @@ Some useful references:
 
 This approach is based on [Deploy a Go Application on Kubernetes with Helm](https://docs.bitnami.com/tutorials/deploy-go-application-kubernetes-helm/)
 
-First login to your cluster as ``developer`` (rather than ``kubeadmin``), then:
+First login to your cluster as ``developer`` (rather than ``kubeadmin``), then create the initial helm chart.
 
 ```bash
+$ oc login -u developer -p developer https://api.crc.testing:6443
 $ helm create flask-lorem-ipsum
 Creating flask-lorem-ipsum
 
@@ -127,7 +128,7 @@ flask-lorem-ipsum/
 
 3 directories, 10 files
 ```
-This creates a helm-chart, a folder/file structure, that is for ``nginx``, version ``1.16.0``, that does not install without modifications.
+This creates a helm-chart, a folder/file structure, *flask-lorem-ipsum*, that is for ``nginx``, version ``1.16.0``, which does not install without modifications.
 
 Chart (folder) structure
 * Chart.yaml - chart/application version;
@@ -151,7 +152,9 @@ version: 0.1.0                           # chart version (SemVer https://semver.
 appVersion: "1.16.0"                     # application version (quoted string, SemVer format optional)
 ```
 
-### File ``values.yaml`` which provides values to the folder templates, edited to leave only the salient parts and add my comments. 
+### File ``values.yaml`` which provides values to the folder templates.
+
+The file has been edited to leave only the salient parts and add my comments. 
 
 ```bash
 replicaCount: 1             # minimum number of pods to run the application
@@ -266,7 +269,7 @@ Summary of changes:
     21	serviceAccount:
 ```
 
-### Update templates/deployment.yaml
+### Update the templates/deployment.yaml
 
 Change the "deployment.yaml" to use the values added to the "values.yaml" above;
 
@@ -298,7 +301,7 @@ Summary of changes:
     49	            {{- toYaml .Values.resources | nindent 12 }}
 ```
 
-### Update templates/NOTES.txt
+### Update the templates/NOTES.txt
 
 The content of this file is displayed if the deployment is successful, but defaults to displaying ``kubectl`` (Kubernetes) and
 not ``oc`` (OpenShift Container Platform) commands.
@@ -353,10 +356,9 @@ $ oc new-project work01
 
 $ helm list # should be empty (as shown)
 NAME	NAMESPACE	REVISION	UPDATED	STATUS	CHART	APP VERSION
-$ helm lint flask-lorem-ipsum
 
 $ helm lint flask-lorem-ipsum                                # lint the helm chart
-$ helm install --dry-run --debug lazy-dog flask-lorem-ipsum  # error-free dry-run with debugging
+$ helm install --dry-run --debug lazy-dog flask-lorem-ipsum  # error-free dry-run check with debugging
 
 # install using the helm-chart
 $ helm install lazy-dog flask-lorem-ipsum
@@ -386,7 +388,7 @@ $ helm list
 NAME    	NAMESPACE	REVISION	UPDATED                             	STATUS  	CHART                  	APP VERSION
 lazy-dog	work01   	1       	2021-12-30 10:39:26.117738 +0100 CET	deployed	flask-lorem-ipsum-0.1.0	v0.1.0     
 
-$ helm get manifest lazy-dog                                 # check the manifest, expanded install scripts
+$ helm get manifest lazy-dog                                 # check the manifest, the expanded install scripts
 
 $ oc get pods # your pod name will be different (READY 1/1 so up and running)
 NAME                                          READY   STATUS    RESTARTS   AGE
@@ -430,12 +432,13 @@ $ oc rsh lazy-dog-flask-lorem-ipsum-7878dbb69c-mk88n
 $ helm list
 NAME    	NAMESPACE	REVISION	UPDATED                             	STATUS  	CHART                  	APP VERSION
 lazy-dog	work01   	1       	2021-12-30 10:39:26.117738 +0100 CET	deployed	flask-lorem-ipsum-0.1.0	v0.1.0     
+
 $ helm uninstall lazy-dog
 release "lazy-dog" uninstalled
 $ helm list -all
 NAME	NAMESPACE	REVISION	UPDATED	STATUS	CHART	APP VERSION
 
-# Route not in helm chart, so have to manually delete it.
+# Route not in helm chart, so must manually delete it.
 $ oc get all
 NAME                                                  HOST/PORT                                            PATH   SERVICES                     PORT   TERMINATION   WILDCARD
 route.route.openshift.io/lazy-dog-flask-lorem-ipsum   lazy-dog-flask-lorem-ipsum-work01.apps-crc.testing          lazy-dog-flask-lorem-ipsum   http                 None
@@ -445,6 +448,55 @@ route.route.openshift.io "lazy-dog-flask-lorem-ipsum" deleted
 ```
 
 ### Adding a route to expose flask-lorem-ipsum
+
+There are several ways to expose a service outside the cluster, and some disagreement in the industry as to the 
+best approach. The following is a good starting pint to understand your choices.
+
+* [A Guide to using Routes, Ingress and Gateway APIs in Kubernetes without vendor lock-in](https://cloud.redhat.com/blog/a-guide-to-using-routes-ingress-and-gateway-apis-in-kubernetes-without-vendor-lock-in)
+
+There are good and bad points with all these approaches. The choice is not simple and depends on your project
+requirements, how you wish to handle TLS/HTTPS connections, and if you want to do *blue/green* and/or 
+*canary* deployments.
+
+#### Expose flask-lorem-ipsum via the Ingress Controller
+
+This is the simplest *de-facto* approach, simply update ingress section in `values.yaml` as shown.
+More sophisticated control is possible via the `templates/ingress.html`, check out:
+
+* [Openshift Container Platform 4.10: Ingress v1 networking.k8s.io](https://docs.openshift.com/container-platform/4.10/rest_api/network_apis/ingress-networking-k8s-io-v1.html#ingress-networking-k8s-io-v1)
+* [Ingress v1 networking.k8s.io](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.24/#ingress-v1-networking-k8s-io)
+
+```bash
+$ cat -n flask-lorem-ipsum/values.yaml | tail -n +48 | head -n 22
+    48	
+    49	service:
+    50	  type: ClusterIP
+    51	  port: 80
+    52	
+    53	ingress:
+    54	  enabled: true
+    55	  className: ""
+    56	  annotations: {}
+    57	    # kubernetes.io/ingress.class: nginx
+    58	    # kubernetes.io/tls-acme: "true"
+    59	  hosts:
+    60	    - host: flask-lorem-ipsum.apps-crc.testing
+    61	      paths:
+    62	        - path: /
+    63	          pathType: ImplementationSpecific
+    64	  tls: []
+    65	  #  - secretName: chart-example-tls
+    66	  #    hosts:
+    67	  #      - chart-example.local
+    68	
+    69	resources: {}
+```
+
+#### Expose flask-lorem-ipsum via the Redhat Routes
+
+Redhat OpenShift Container Platform Route documentation.
+* [RedHat Openshift route.openshift.io/v1](https://docs.openshift.com/container-platform/4.10/rest_api/network_apis/route-route-openshift-io-v1.html)
+* [RedHat Openshift Configuring Routes](https://access.redhat.com/documentation/en-us/openshift_container_platform/4.10/html/networking/configuring-routes)
 
 Exposing the application outside the CRC cluster has to be done manually using the command:
 * ``oc expose service/lazy-dog-flask-lorem-ipsum``
@@ -605,17 +657,6 @@ $ cat -n values.yaml | head -15
     14	
     15	replicaCount: 1
 ```
-
-Redhat OpenShift Container Platform Route documentation.
-* [RedHat Openshift route.openshift.io/v1](https://docs.openshift.com/container-platform/4.10/rest_api/network_apis/route-route-openshift-io-v1.html)
-* [RedHat Openshift Configuring Routes](https://access.redhat.com/documentation/en-us/openshift_container_platform/4.10/html/networking/configuring-routes)
-
-### Routing traffic into the cluster, different philosophies.
-
-There are several ways to expose a service outside the cluster, and some disagreement in the industry as to the 
-best approach. The following is a good starting pint to understand your choices.
-
-* [A Guide to using Routes, Ingress and Gateway APIs in Kubernetes without vendor lock-in](https://cloud.redhat.com/blog/a-guide-to-using-routes-ingress-and-gateway-apis-in-kubernetes-without-vendor-lock-in)
 
 ## Using Helm to deploy a different version
 
@@ -1280,6 +1321,10 @@ such as `local file storage`, `etcd` or one of the supported `cloud storage solu
 ### Installing Local JFrog Artifactory from its Helm Chart
 
 *** TODO - fix the physical volume claims issue ***
+
+* [JFrog Artifactory Helm Installation](https://www.jfrog.com/confluence/display/JFROG/Installing+Artifactory#InstallingArtifactory-HelmInstallation)
+* [JFrog Artifactory Helm Chart - GitHub](https://github.com/jfrog/charts/tree/master/stable/artifactory)
+* [Kubernetes Helm Chart Repositories](https://www.jfrog.com/confluence/display/JFROG/Kubernetes+Helm+Chart+Repositories)
 
 ```bash
 $ oc whoami # kubeadmin
