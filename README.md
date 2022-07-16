@@ -912,6 +912,81 @@ only `Chart.yaml` and `values.yaml` need minor updates. Notice that the `Chart.v
 
 Performing an `helm upgrade` or `helm rollback` is likely to impact site availability so be sure to test the impact.
 
+##### Ingress Route Modifications
+
+```bash
+$ cat -n flask-lorem-ipsum/values.yaml | tail -n +53 | head -n 17
+    53	ingress:
+    54	  enabled: true
+    55	  className: ""
+    56	  annotations: {}
+    57	    # kubernetes.io/ingress.class: nginx
+    58	    # kubernetes.io/tls-acme: "true"
+    59	  hosts:
+    60	    - host: flask-lorem-ipsum-v0.1.0.apps-crc.testing
+    61	      paths:
+    62	        - path: /
+    63	          pathType: ImplementationSpecific
+    64	  tls: []
+    65	  #  - secretName: chart-example-tls
+    66	  #    hosts:
+    67	  #      - chart-example.local
+    68	
+    69	resources: {}
+
+$ cp -R flask-lorem-ipsum flask-lorem-ipsum-v0.2.0
+$ cp -R flask-lorem-ipsum flask-lorem-ipsum-v0.3.0
+
+$ diff flask-lorem-ipsum flask-lorem-ipsum-v0.2.0
+Common subdirectories: flask-lorem-ipsum/charts and flask-lorem-ipsum-v0.2.0/charts
+diff flask-lorem-ipsum/Chart.yaml flask-lorem-ipsum-v0.2.0/Chart.yaml
+18c18
+< version: 0.1.0
+---
+> version: 0.2.0
+24c24
+< appVersion: "v0.1.0" # was: "1.16.0"
+---
+> appVersion: "v0.2.0" # was: "1.16.0"
+Only in flask-lorem-ipsum-v0.2.0: flask-lorem-ipsum
+Common subdirectories: flask-lorem-ipsum/templates and flask-lorem-ipsum-v0.2.0/templates
+diff flask-lorem-ipsum/values.yaml flask-lorem-ipsum-v0.2.0/values.yaml
+21c21
+<   tag: "v0.1.0" # was: ""
+---
+>   tag: "v0.2.0" # was: ""
+60c60
+<     - host: flask-lorem-ipsum-v0.1.0.apps-crc.testing
+---
+>     - host: flask-lorem-ipsum-v0.2.0.apps-crc.testing
+
+$ diff flask-lorem-ipsum flask-lorem-ipsum-v0.3.0
+Common subdirectories: flask-lorem-ipsum/charts and flask-lorem-ipsum-v0.3.0/charts
+diff flask-lorem-ipsum/Chart.yaml flask-lorem-ipsum-v0.3.0/Chart.yaml
+18c18
+< version: 0.1.0
+---
+> version: 0.3.0
+24c24
+< appVersion: "v0.1.0" # was: "1.16.0"
+---
+> appVersion: "v0.3.0" # was: "1.16.0"
+Only in flask-lorem-ipsum-v0.3.0: flask-lorem-ipsum
+Common subdirectories: flask-lorem-ipsum/templates and flask-lorem-ipsum-v0.3.0/templates
+diff flask-lorem-ipsum/values.yaml flask-lorem-ipsum-v0.3.0/values.yaml
+21c21
+<   tag: "v0.1.0" # was: ""
+---
+>   tag: "v0.3.0" # was: ""
+60c60
+<     - host: flask-lorem-ipsum-v0.1.0.apps-crc.testing
+---
+>     - host: flask-lorem-ipsum-v0.3.0.apps-crc.testing
+
+```
+
+##### Redhat Route Modifications
+
 ```bash
 $ cp -R flask-lorem-ipsum flask-lorem-ipsum-v0.2.0
 $ cp -R flask-lorem-ipsum flask-lorem-ipsum-v0.3.0
